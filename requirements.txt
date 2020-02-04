@@ -1,0 +1,2 @@
+cryptography==2.1.4
+py-dmidecode==0.1.0
