@@ -1,8 +1,10 @@
 import argparse
 import configparser
+import glob
 import json
 import logging
 import requests
+import subprocess
 import sys
 import traceback
 from datetime import datetime
@@ -10,23 +12,33 @@ from pathlib import Path
 from time import sleep
 
 from cryptography.fernet import Fernet
-from dmidecode import DMIDecode
+
+import executors
 
 class Agent:
     def __init__(self, config):
+        self.config = config
         self.identity = self.get_identity()
         logging.info(f'Initializing with identity {self.identity}')
-        self.config = config
 
     def get_identity(self):
-        uuid = None
+        key_dir = self.config['KEY_DIR']
         try:
-            dmi = DMIDecode()
-            uuid = dmi.get('System')[0].get('UUID')
+            subprocess.run(f'umount {key_dir}', shell=True, check=True)
+            subprocess.run(f'mount -a 2>/dev/null', shell=True)
         except:
-            logging.error('Failed to get system UUID')
+            logging.error(f'Failed to refresh {key_dir}')
             logging.debug(traceback.format_exc())
-        return uuid.lower()
+            return None
+        uuid_path = glob.glob(f'{key_dir}uuid*.txt')
+        if bool(len(uuid_path)):
+            uuid_path = uuid_path[0]
+            logging.debug(f'Checking for identity at {uuid_path}')
+            with open(uuid_path) as uuid_file:
+                return uuid_file.read().strip().lower()
+        else:
+            logging.error(f'Failed to find identity file')
+            return None
 
     def check_identity(self):
         current_identity = self.get_identity()
@@ -74,6 +86,16 @@ class Agent:
         self.identity = identity
         return instructions
 
+    def delete_instructions(self):
+        logging.debug('Deleting post-clone instructions')
+        url = self.config['AIR_API']
+        url += f'simulation-node/{self.identity}/instructions/'
+        try:
+            res = requests.delete(url)
+        except:
+            logging.error('Failed to delete post-clone instructions')
+            logging.debug(traceback.format_exc())
+
 def load_config(config_file):
     config = configparser.ConfigParser()
     config.read(config_file)
@@ -90,20 +112,33 @@ def parse_args():
                         help='Location of the service\'s config file ' + \
                              '(default: /etc/cumulus-air/agent.ini)',
                         default='/etc/cumulus-air/agent.ini')
-    parser.add_argument('-l', '--log-level', help='Logging verbosity level (default: WARNING)',
-                        default='WARNING', choices=('CRITICAL', 'ERROR', 'WARNING', 'INFO',
-                                                    'DEBUG'))
     return parser.parse_args()
+
+def start_daemon(agent):
+    while True:
+        same_id = agent.check_identity()
+        if not same_id:
+            results = []
+            logging.info('Identity has changed!')
+            instructions = agent.get_instructions()
+            for instruction in instructions:
+                executor = instruction['executor']
+                if executor in executors.EXECUTOR_MAP.keys():
+                    results.append(executors.EXECUTOR_MAP[executor](instruction['data']))
+                else:
+                    logging.warning(f'Received unsupported executor {executor}')
+            if all(results):
+                agent.delete_instructions()
+
+        sleep(int(config['CHECK_INTERVAL']))
 
 if __name__ == '__main__':
     args = parse_args()
     config = load_config(args.config_file)
-    logging.getLogger().setLevel(args.log_level)
+    log_level = 'WARNING'
+    if config['LOG_LEVEL'].upper() in ('CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG'):
+        log_level = config['LOG_LEVEL'].upper()
+    logging.getLogger().setLevel(log_level)
     agent = Agent(config)
-    while True:
-        same_id = agent.check_identity()
-        if not same_id:
-            logging.info('Identity has changed!')
-            instructions = agent.get_instructions()
-            print(instructions)
-        sleep(int(config['CHECK_INTERVAL']))
+
+    start_daemon(agent)
