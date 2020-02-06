@@ -24,6 +24,8 @@ setup:
 lint:
   stage: test
   before_script:
-    - pip install pylint
+    - pip install pylint virtualenv
+    - virtualenv venv
+    - source venv/bin/activate
   script:
     - pylint *.py
