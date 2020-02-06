@@ -1,9 +1,14 @@
+"""
+The AIR Agent is a systemd service that detects if a VM has been cloned.
+When a clone operation has been detected, it calls out to the AIR API to see if there are any
+post-clone instructions available to execute.
+"""
+
 import argparse
 import configparser
 import glob
 import json
 import logging
-import requests
 import subprocess
 import sys
 import traceback
@@ -12,20 +17,30 @@ from pathlib import Path
 from time import sleep
 
 from cryptography.fernet import Fernet
+import requests
 
 import executors
 
 class Agent:
+    """
+    Agent daemon
+    """
     def __init__(self, config):
         self.config = config
         self.identity = self.get_identity()
         logging.info(f'Initializing with identity {self.identity}')
 
     def get_identity(self):
+        """
+        Gets the VM's identity (UUID) via its key drive
+
+        Returns:
+        str - The VM UUID (ex: 'abcdefab-0000-1111-2222-123456789012')
+        """
         key_dir = self.config['KEY_DIR']
         try:
             subprocess.run(f'umount {key_dir}', shell=True, check=True)
-            subprocess.run(f'mount -a 2>/dev/null', shell=True)
+            subprocess.run(f'mount -a 2>/dev/null', shell=True, check=True)
         except:
             logging.error(f'Failed to refresh {key_dir}')
             logging.debug(traceback.format_exc())
@@ -41,12 +56,28 @@ class Agent:
             return None
 
     def check_identity(self):
+        """
+        Checks the VM's current identity against its initialized identity
+
+        Returns:
+        bool - True if the VM's identity is still the same
+        """
         current_identity = self.get_identity()
         logging.debug(f'Initialized identity: {self.identity}, ' + \
                       f'Current identity: {current_identity}')
         return self.identity == current_identity
 
     def get_key(self, identity):
+        """
+        Fetch's the VM's decryption key from its key drive
+
+        Arguments:
+        identity (str) - The VM's current UUID. This is used to validate we have the correct
+                         key file.
+
+        Returns:
+        str - The decryption key
+        """
         logging.debug(f'Getting key for {identity}')
         filename = identity.split('-')[0]
         key_dir = self.config['KEY_DIR']
@@ -60,6 +91,16 @@ class Agent:
             return None
 
     def decrypt_instructions(self, instructions, identity):
+        """
+        Decrypts a set of instructions received from the AIR API
+
+        Arguments:
+        instructions (list) - A list of encrypted instructions received from the API
+        identity (str) - The VM's current UUID
+
+        Returns:
+        list - A list of decrypted instructions
+        """
         decrypted_instructions = []
         key = self.get_key(identity)
         if key:
@@ -71,6 +112,12 @@ class Agent:
         return decrypted_instructions
 
     def get_instructions(self):
+        """
+        Fetches a set of post-clone instructions from the AIR API
+
+        Returns:
+        list - A list of instructions
+        """
         logging.debug('Getting post-clone instructions')
         identity = self.get_identity()
         url = self.config['AIR_API']
@@ -87,16 +134,29 @@ class Agent:
         return instructions
 
     def delete_instructions(self):
+        """
+        Deletes instructions via the AIR API. This serves as an indication that the instructions
+        have been successfully executed (i.e. they do not need to be re-tried)
+        """
         logging.debug('Deleting post-clone instructions')
         url = self.config['AIR_API']
         url += f'simulation-node/{self.identity}/instructions/'
         try:
-            res = requests.delete(url)
+            requests.delete(url)
         except:
             logging.error('Failed to delete post-clone instructions')
             logging.debug(traceback.format_exc())
 
 def load_config(config_file):
+    """
+    Helper function to load the agent's config file
+
+    Arguments:
+    config_file (str) - The fully qualified path to the agent configuration file
+
+    Returns:
+    dict - A dictionary of all loaded config values
+    """
     config = configparser.ConfigParser()
     config.read(config_file)
     try:
@@ -106,6 +166,9 @@ def load_config(config_file):
         sys.exit(1)
 
 def parse_args():
+    """
+    Helper function to provide command line arguments for the agent
+    """
     year = datetime.now().year
     parser = argparse.ArgumentParser(description=f'AIR Agent service (Cumulus Networks © {year})')
     parser.add_argument('-c', '--config-file',
@@ -115,6 +178,13 @@ def parse_args():
     return parser.parse_args()
 
 def start_daemon(agent):
+    """
+    Main worker function. Starts an infinite loop that periodically checks its identity and,
+    if changed, asks the API for post-clone instructions.
+
+    Arguments:
+    agent (Agent) - An Agent instance
+    """
     while True:
         same_id = agent.check_identity()
         if not same_id:
@@ -130,15 +200,15 @@ def start_daemon(agent):
             if all(results):
                 agent.delete_instructions()
 
-        sleep(int(config['CHECK_INTERVAL']))
+        sleep(int(agent.config['CHECK_INTERVAL']))
 
 if __name__ == '__main__':
-    args = parse_args()
-    config = load_config(args.config_file)
-    log_level = 'WARNING'
-    if config['LOG_LEVEL'].upper() in ('CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG'):
-        log_level = config['LOG_LEVEL'].upper()
-    logging.getLogger().setLevel(log_level)
-    agent = Agent(config)
+    ARGS = parse_args()
+    CONFIG = load_config(ARGS.config_file)
+    LOG_LEVEL = 'WARNING'
+    if CONFIG['LOG_LEVEL'].upper() in ('CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG'):
+        LOG_LEVEL = CONFIG['LOG_LEVEL'].upper()
+    logging.getLogger().setLevel(LOG_LEVEL)
+    AGENT = Agent(CONFIG)
 
-    start_daemon(agent)
+    start_daemon(AGENT)

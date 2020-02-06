@@ -1,0 +1,27 @@
+image: python:3.6
+
+# Change pip's cache directory to be inside the project directory since we can
+# only cache local items.
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
+
+cache:
+  paths:
+    - .cache/pip
+    - venv/
+
+before_script:
+  - python -V
+  - pip install virtualenv
+  - virtualenv venv
+  - source venv/bin/activate
+
+setup:
+  stage: build
+  script:
+    - pip install -r requirements.txt
+
+lint:
+  stage: test
+  script:
+    - pylint *.py
