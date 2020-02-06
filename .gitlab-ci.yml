@@ -19,9 +19,11 @@ before_script:
 setup:
   stage: build
   script:
-    - pip install -r requirements.txt pylint
+    - pip install -r requirements.txt
 
 lint:
   stage: test
+  before_script:
+    - pip instally pylint
   script:
     - pylint *.py
