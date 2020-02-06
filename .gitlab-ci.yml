@@ -24,6 +24,6 @@ setup:
 lint:
   stage: test
   before_script:
-    - pip instally pylint
+    - pip install pylint
   script:
     - pylint *.py
