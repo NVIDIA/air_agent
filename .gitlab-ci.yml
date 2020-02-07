@@ -19,7 +19,7 @@ lint:
 unit:
   stage: test
   before_script:
-    - pip install coverage -r requirements.txt
+    - pip install coverage pytest -r requirements.txt
   script:
     - coverage run --omit='tests.py' --source='./' `which pytest` *.py
   after_script:
