@@ -10,19 +10,9 @@ cache:
     - .cache/pip
     - venv/
 
-setup:
-  stage: build
-  script:
-    - python -V
-    - pip install virtualenv -r requirements.txt
-    - virtualenv venv
-    - source venv/bin/activate
-
 lint:
   stage: test
   before_script:
-    - pip install virtualenv pylint pylint-quotes
-    - virtualenv venv
-    - source venv/bin/activate
+    - pip install pylint pylint-quotes -r requirements.txt
   script:
     - pylint *.py
