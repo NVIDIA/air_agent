@@ -19,6 +19,25 @@ lint:
 unit:
   stage: test
   before_script:
-    - pip install -r requirements.txt
+    - pip install coverage -r requirements.txt
   script:
-    - ./run_tests.sh
+    - coverage run --omit='tests.py' --source='./' `which pytest` *.py
+  after_script:
+    - coverage report
+    - coverage html
+  artifacts:
+    paths:
+      - htmlcov/
+    expire_in: 1 hour
+
+pages:
+  stage: deploy
+  dependencies:
+    - unit
+  script:
+    - mv htmlcov/ public/
+  artifacts:
+    paths:
+      - public
+  only:
+    - master
