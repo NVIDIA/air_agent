@@ -10,11 +10,13 @@ cache:
     - .cache/pip
     - venv/
 
-before_script:
-  - python -V
-  - pip install virtualenv -r requirements.txt
-  - virtualenv venv
-  - source venv/bin/activate
+setup:
+  stage: build
+  script:
+    - python -V
+    - pip install virtualenv -r requirements.txt
+    - virtualenv venv
+    - source venv/bin/activate
 
 lint:
   stage: test
