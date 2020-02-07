@@ -24,7 +24,7 @@ setup:
 lint:
   stage: test
   before_script:
-    - pip install pylint virtualenv
+    - pip install virtualenv pylint pylint-quotes
     - virtualenv venv
     - source venv/bin/activate
   script:
