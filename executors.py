@@ -24,6 +24,6 @@ def shell(instructions):
             logging.error(f'Command `{line}` failed')
             logging.debug(traceback.format_exc())
             return False
-        return True
+    return True
 
 EXECUTOR_MAP = {'shell': shell}

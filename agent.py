@@ -177,13 +177,14 @@ def parse_args():
                         default='/etc/cumulus-air/agent.ini')
     return parser.parse_args()
 
-def start_daemon(agent):
+def start_daemon(agent, test=False):
     """
     Main worker function. Starts an infinite loop that periodically checks its identity and,
     if changed, asks the API for post-clone instructions.
 
     Arguments:
     agent (Agent) - An Agent instance
+    [test] (bool) - Used in unit testing to avoid infinite loop
     """
     while True:
         same_id = agent.check_identity()
@@ -201,6 +202,8 @@ def start_daemon(agent):
                 agent.delete_instructions()
 
         sleep(int(agent.config['CHECK_INTERVAL']))
+        if test:
+            break
 
 if __name__ == '__main__':
     ARGS = parse_args()
