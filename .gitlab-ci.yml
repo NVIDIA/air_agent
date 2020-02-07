@@ -8,11 +8,17 @@ variables:
 cache:
   paths:
     - .cache/pip
-    - venv/
 
 lint:
   stage: test
   before_script:
     - pip install pylint pylint-quotes -r requirements.txt
   script:
-    - pylint *.py
+    - pylint --ignore=tests.py *.py
+
+unit:
+  stage: test
+  before_script:
+    - pip install -r requirements.txt
+  script:
+    - ./run_tests.sh
