@@ -130,7 +130,6 @@ class Agent:
             logging.debug(traceback.format_exc())
             return {}
         instructions = self.decrypt_instructions(instructions, identity)
-        self.identity = identity
         return instructions
 
     def delete_instructions(self):
@@ -200,6 +199,7 @@ def start_daemon(agent, test=False):
                     logging.warning(f'Received unsupported executor {executor}')
             if all(results):
                 agent.delete_instructions()
+                agent.identity = agent.get_identity()
 
         sleep(int(agent.config['CHECK_INTERVAL']))
         if test:
