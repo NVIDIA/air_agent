@@ -197,7 +197,7 @@ def start_daemon(agent, test=False):
                     results.append(executors.EXECUTOR_MAP[executor](instruction['data']))
                 else:
                     logging.warning(f'Received unsupported executor {executor}')
-            if all(results):
+            if len(results) > 0 and all(results):
                 agent.delete_instructions()
                 agent.identity = agent.get_identity()
 
