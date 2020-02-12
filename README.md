@@ -4,6 +4,8 @@ The AIR Agent is a systemd service that detects if a VM has been cloned. When a 
 
 ## Installing
 
+Make sure `python3` and `pip3` are installed, and then run:
+
 `sudo ./install.sh`
 
 ## Configuration
