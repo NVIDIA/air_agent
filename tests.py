@@ -3,6 +3,7 @@ Unit tests for Agent module
 """
 #pylint: disable=unused-argument,missing-class-docstring,missing-function-docstring,arguments-differ
 
+import subprocess
 from datetime import datetime
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
@@ -31,7 +32,16 @@ class TestAgentIdentity(TestCase):
         mock_open.assert_called_with(f'{key_dir}uuid_123.txt')
         self.assertEqual(res, 'abc')
 
-    @patch('subprocess.run', side_effect=Exception)
+    @patch('subprocess.run', side_effect=[subprocess.CalledProcessError(1, 'a'), True, True, True])
+    @patch('logging.debug')
+    def test_get_identity_failed_umount(self, mock_log, mock_run):
+        agent_obj = Agent(MOCK_CONFIG)
+        res = agent_obj.get_identity()
+        self.assertIsNone(res)
+        key_dir = MOCK_CONFIG['KEY_DIR']
+        mock_log.assert_called_with(f'{key_dir} is not mounted')
+
+    @patch('subprocess.run', side_effect=[True, True, True, subprocess.CalledProcessError(1, 'a')])
     @patch('logging.error')
     def test_get_identity_failed_mount(self, mock_log, mock_run):
         agent_obj = Agent(MOCK_CONFIG)
