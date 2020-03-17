@@ -25,8 +25,8 @@ install_service() {
         cp ./air-agent@.service /etc/systemd/system/air-agent@.service
         sed -i 's,{1},'"${IP_BIN}"',' /etc/systemd/system/air-agent@.service
         sed -i "s/{2}/${1}/" /etc/systemd/system/air-agent@.service
-        systemctl enable air-agent
-        systemctl start air-agent
+        systemctl enable air-agent@${1}
+        systemctl start air-agent@${1}
     fi
 }
 
