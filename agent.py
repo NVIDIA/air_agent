@@ -40,11 +40,11 @@ class Agent:
         """
         key_dir = self.config['KEY_DIR']
         try:
-            subprocess.run(f'umount {key_dir} 2>/dev/null', shell=True, check=True)
+            subprocess.run(f'umount {key_dir} 2>/dev/null', shell=True)
         except subprocess.CalledProcessError:
             logging.debug(f'{key_dir} is not mounted')
         try:
-            subprocess.run(f'mount -a 2>/dev/null', shell=True, check=True)
+            subprocess.run(f'mount -a 2>/dev/null', shell=True)
         except:
             logging.error(f'Failed to refresh {key_dir}')
             logging.debug(traceback.format_exc())
