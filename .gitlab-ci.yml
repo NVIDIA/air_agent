@@ -14,7 +14,7 @@ lint:
   before_script:
     - pip install pylint pylint-quotes -r requirements.txt
   script:
-    - pylint --ignore=tests.py *.py
+    - pylint *.py
 
 unit:
   stage: test

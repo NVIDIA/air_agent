@@ -29,6 +29,7 @@ class Agent:
         self.config = config
         self.identity = self.get_identity()
         logging.info(f'Initializing with identity {self.identity}')
+        parse_instructions(self)
 
     def get_identity(self):
         """
@@ -179,6 +180,25 @@ def parse_args():
                         default='/etc/cumulus-air/agent.ini')
     return parser.parse_args()
 
+def parse_instructions(agent):
+    """
+    Parses and executes a set of instructions from the AIR API
+
+    Arguments:
+    agent (Agent) - An Agent instance
+    """
+    results = []
+    instructions = agent.get_instructions()
+    for instruction in instructions:
+        executor = instruction['executor']
+        if executor in executors.EXECUTOR_MAP.keys():
+            results.append(executors.EXECUTOR_MAP[executor](instruction['data']))
+        else:
+            logging.warning(f'Received unsupported executor {executor}')
+    if len(results) > 0 and all(results):
+        agent.delete_instructions()
+        agent.identity = agent.get_identity()
+
 def start_daemon(agent, test=False):
     """
     Main worker function. Starts an infinite loop that periodically checks its identity and,
@@ -191,18 +211,8 @@ def start_daemon(agent, test=False):
     while True:
         same_id = agent.check_identity()
         if not same_id:
-            results = []
             logging.info('Identity has changed!')
-            instructions = agent.get_instructions()
-            for instruction in instructions:
-                executor = instruction['executor']
-                if executor in executors.EXECUTOR_MAP.keys():
-                    results.append(executors.EXECUTOR_MAP[executor](instruction['data']))
-                else:
-                    logging.warning(f'Received unsupported executor {executor}')
-            if len(results) > 0 and all(results):
-                agent.delete_instructions()
-                agent.identity = agent.get_identity()
+            parse_instructions(agent)
 
         sleep(int(agent.config['CHECK_INTERVAL']))
         if test:

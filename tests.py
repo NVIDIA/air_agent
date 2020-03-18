@@ -1,7 +1,7 @@
 """
 Unit tests for Agent module
 """
-#pylint: disable=unused-argument,missing-class-docstring,missing-function-docstring,arguments-differ
+#pylint: disable=unused-argument,missing-class-docstring,missing-function-docstring,arguments-differ,no-self-use
 
 import subprocess
 from datetime import datetime
@@ -34,7 +34,8 @@ class TestAgentIdentity(TestCase):
 
     @patch('subprocess.run', side_effect=[subprocess.CalledProcessError(1, 'a'), True, True, True])
     @patch('logging.debug')
-    def test_get_identity_failed_umount(self, mock_log, mock_run):
+    @patch('agent.parse_instructions')
+    def test_get_identity_failed_umount(self, mock_parse, mock_log, mock_run):
         agent_obj = Agent(MOCK_CONFIG)
         res = agent_obj.get_identity()
         self.assertIsNone(res)
@@ -43,7 +44,8 @@ class TestAgentIdentity(TestCase):
 
     @patch('subprocess.run', side_effect=[True, True, True, subprocess.CalledProcessError(1, 'a')])
     @patch('logging.error')
-    def test_get_identity_failed_mount(self, mock_log, mock_run):
+    @patch('agent.parse_instructions')
+    def test_get_identity_failed_mount(self, mock_parse, mock_log, mock_run):
         agent_obj = Agent(MOCK_CONFIG)
         res = agent_obj.get_identity()
         self.assertIsNone(res)
@@ -218,17 +220,30 @@ class TestAgentFunctions(TestCase):
         agent_obj.delete_instructions.assert_not_called()
 
     @patch('agent.executors')
-    @patch('agent.sleep')
+    def test_parse_instructions(self, mock_exec):
+        mock_exec.EXECUTOR_MAP = {'shell': MagicMock(side_effect=[1, 2])}
+        mock_agent = MagicMock()
+        mock_agent.get_instructions.return_value = [
+            {'executor': 'shell', 'data': 'foo'},
+            {'executor': 'shell', 'data': 'bar'}
+        ]
+        mock_agent.delete_instructions = MagicMock()
+        mock_agent.get_identity = MagicMock(return_value='abc')
+        agent.parse_instructions(mock_agent)
+        mock_agent.delete_instructions.assert_called()
+        mock_for_assert = MagicMock()
+        mock_for_assert('foo')
+        mock_for_assert('bar')
+        self.assertEqual(mock_exec.EXECUTOR_MAP['shell'].mock_calls, mock_for_assert.mock_calls)
+
+    @patch('agent.executors')
     @patch('logging.warning')
-    def test_start_daemon_unsupported(self, mock_log, mock_sleep, mock_exec):
-        mock_exec.EXECUTOR_MAP = {'shell': MagicMock()}
-        Agent.get_identity = MagicMock(return_value='123-456')
-        agent_obj = Agent(MOCK_CONFIG)
-        agent_obj.check_identity = MagicMock(return_value=False)
-        agent_obj.delete_instructions = MagicMock()
-        agent_obj.get_instructions = MagicMock(return_value=[{'data': 'foo', 'executor': 'bar'}])
-        agent.start_daemon(agent_obj, test=True)
-        mock_log.assert_called_with('Received unsupported executor bar')
+    def test_parse_instructions_unsupported(self, mock_log, mock_exec):
+        mock_exec.EXECUTOR_MAP = {'shell': MagicMock(side_effect=[1, 2])}
+        mock_agent = MagicMock()
+        mock_agent.get_instructions.return_value = [{'executor': 'test', 'data': 'foo'}]
+        agent.parse_instructions(mock_agent)
+        mock_log.assert_called_with('Received unsupported executor test')
 
 class TestExecutors(TestCase):
     @patch('subprocess.run')
