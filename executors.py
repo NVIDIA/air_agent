@@ -17,7 +17,7 @@ def shell(instructions):
     bool - True if all commands executed successfully
     """
     for line in instructions.split('\n'):
-        logging.debug(f'EXEC shell :: {line}')
+        logging.info(f'EXEC shell :: {line}')
         try:
             subprocess.run(line, shell=True, check=True)
         except:

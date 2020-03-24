@@ -62,7 +62,9 @@ class TestAgentIdentity(TestCase):
         mock_log.assert_called_with('Failed to find identity file')
 
 class TestAgent(TestCase):
-    def setUp(self):
+    @patch('agent.datetime')
+    def setUp(self, mock_datetime):
+        mock_datetime.now = MagicMock(return_value=datetime(2020, 3, 1))
         self.mock_id = MagicMock(return_value='123-456')
         Agent.get_identity = self.mock_id
         self.agent = Agent(MOCK_CONFIG)
@@ -71,6 +73,7 @@ class TestAgent(TestCase):
         self.assertDictEqual(self.agent.config, MOCK_CONFIG)
         self.mock_id.assert_called()
         self.assertEqual(self.agent.identity, '123-456')
+        self.assertEqual(self.agent.clock, datetime(2020, 3, 1))
 
     def test_check_identity(self):
         res = self.agent.check_identity()
@@ -140,6 +143,42 @@ class TestAgent(TestCase):
         self.agent.delete_instructions()
         mock_log.assert_called_with('Failed to delete post-clone instructions')
 
+    @patch('agent.datetime')
+    def test_clock_jumped_past(self, mock_datetime):
+        mock_datetime.now = MagicMock(return_value=datetime(2020, 2, 1))
+        res = self.agent.clock_jumped()
+        self.assertTrue(res)
+
+    @patch('agent.datetime')
+    def test_clock_jumped_future(self, mock_datetime):
+        mock_datetime.now = MagicMock(return_value=datetime(2020, 4, 1))
+        res = self.agent.clock_jumped()
+        self.assertTrue(res)
+
+    @patch('agent.datetime')
+    def test_clock_jumped_no_jump(self, mock_datetime):
+        mock_datetime.now = MagicMock(return_value=datetime(2020, 3, 1))
+        res = self.agent.clock_jumped()
+        self.assertFalse(res)
+
+    @patch('subprocess.run')
+    @patch('agent.restart_ntp')
+    @patch('agent.datetime')
+    def test_fix_clock(self, mock_datetime, mock_ntp, mock_run):
+        mock_datetime.now = MagicMock(return_value=datetime(2020, 3, 2))
+        self.agent.fix_clock()
+        mock_run.assert_called_with('hwclock -s', shell=True)
+        mock_ntp.assert_called()
+        self.assertEqual(self.agent.clock, datetime(2020, 3, 2))
+
+    @patch('subprocess.run', side_effect=Exception)
+    @patch('logging.error')
+    def test_fix_clock_failed(self, mock_log, mock_run):
+        start_clock = self.agent.clock
+        self.agent.fix_clock()
+        mock_log.assert_called_with('Failed to fix clock')
+        self.assertEqual(self.agent.clock, start_clock)
+
 class TestAgentFunctions(TestCase):
     class MockConfigParser(dict):
         def __init__(self):
@@ -191,10 +230,13 @@ class TestAgentFunctions(TestCase):
         agent_obj.check_identity = MagicMock(return_value=False)
         agent_obj.delete_instructions = MagicMock()
         agent_obj.get_instructions = MagicMock(return_value=[{'data': 'foo', 'executor': 'shell'}])
+        agent_obj.clock_jumped = MagicMock(return_value=True)
+        agent_obj.fix_clock = MagicMock()
         agent.start_daemon(agent_obj, test=True)
         mock_exec.EXECUTOR_MAP['shell'].assert_called_with('foo')
         agent_obj.delete_instructions.assert_called()
         mock_sleep.assert_called_with(MOCK_CONFIG['CHECK_INTERVAL'])
+        agent_obj.fix_clock.assert_called()
 
     @patch('agent.executors')
     @patch('agent.sleep')
@@ -205,6 +247,20 @@ class TestAgentFunctions(TestCase):
         agent_obj.check_identity = MagicMock(return_value=True)
         agent.start_daemon(agent_obj, test=True)
         agent_obj.get_instructions.assert_not_called()
+
+    @patch('agent.executors')
+    @patch('agent.sleep')
+    def test_start_daemon_no_jump(self, mock_sleep, mock_exec):
+        mock_exec.EXECUTOR_MAP = {'shell': MagicMock()}
+        Agent.get_identity = MagicMock(return_value='123-456')
+        agent_obj = Agent(MOCK_CONFIG)
+        agent_obj.check_identity = MagicMock(return_value=False)
+        agent_obj.delete_instructions = MagicMock()
+        agent_obj.get_instructions = MagicMock(return_value=[{'data': 'foo', 'executor': 'shell'}])
+        agent_obj.clock_jumped = MagicMock(return_value=False)
+        agent_obj.fix_clock = MagicMock()
+        agent.start_daemon(agent_obj, test=True)
+        agent_obj.fix_clock.assert_not_called()
 
     @patch('agent.executors')
     @patch('agent.sleep')
@@ -244,6 +300,17 @@ class TestAgentFunctions(TestCase):
         mock_agent.get_instructions.return_value = [{'executor': 'test', 'data': 'foo'}]
         agent.parse_instructions(mock_agent)
         mock_log.assert_called_with('Received unsupported executor test')
+
+    @patch('subprocess.check_output',
+           return_value=b'ntp.service\nfoo.service\nntp@mgmt.service\nchrony.service')
+    @patch('subprocess.call')
+    def test_restart_ntp(self, mock_call, mock_check):
+        mock_for_assert = MagicMock()
+        mock_for_assert('systemctl restart ntp.service', shell=True)
+        mock_for_assert('systemctl restart ntp@mgmt.service', shell=True)
+        mock_for_assert('systemctl restart chrony.service', shell=True)
+        agent.restart_ntp()
+        self.assertEqual(mock_call.mock_calls, mock_for_assert.mock_calls)
 
 class TestExecutors(TestCase):
     @patch('subprocess.run')

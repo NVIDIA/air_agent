@@ -9,10 +9,11 @@ import configparser
 import glob
 import json
 import logging
+import re
 import subprocess
 import sys
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from time import sleep
 
@@ -27,8 +28,9 @@ class Agent:
     """
     def __init__(self, config):
         self.config = config
+        self.clock = datetime.now()
         self.identity = self.get_identity()
-        logging.info(f'Initializing with identity {self.identity}')
+        logging.info(f'Initializing with identity {self.identity} at {self.clock}')
         parse_instructions(self)
 
     def get_identity(self):
@@ -150,6 +152,29 @@ class Agent:
             logging.error('Failed to delete post-clone instructions')
             logging.debug(traceback.format_exc())
 
+    def clock_jumped(self):
+        """
+        Returns True if the system's time has jumped by +/- 5 minutes since the last recorded time
+        """
+        now = datetime.now()
+        delta = now - self.clock
+        logging.debug(f'Last run: {self.clock}, Now: {now}, Delta: {delta}')
+        return (delta > timedelta(minutes=5)) or (-delta > timedelta(minutes=5))
+
+    def fix_clock(self):
+        """
+        Fixes the system's time by 1) syncing the clock from the hypervisor, and
+        2) Restarting any running NTP/chrony service
+        """
+        try:
+            logging.info('Syncing clock from hypervisor')
+            subprocess.run('hwclock -s', shell=True) # sync from hardware
+            restart_ntp()
+            self.clock = datetime.now()
+        except:
+            logging.debug(traceback.format_exc())
+            logging.error('Failed to fix clock')
+
 def load_config(config_file):
     """
     Helper function to load the agent's config file
@@ -199,6 +224,19 @@ def parse_instructions(agent):
         agent.delete_instructions()
         agent.identity = agent.get_identity()
 
+def restart_ntp():
+    """
+    Restarts any running ntpd or chrony service that might be running. Includes support for
+    services running in a VRF.
+    """
+    services = subprocess.check_output('systemctl list-units -t service --plain --no-legend',
+                                       shell=True)
+    for line in services.decode('utf-8').split('\n'):
+        service = line.split(' ')[0]
+        if re.match(r'(ntp|chrony).*\.service', service):
+            logging.info(f'Restarting {service}')
+            subprocess.call(f'systemctl restart {service}', shell=True)
+
 def start_daemon(agent, test=False):
     """
     Main worker function. Starts an infinite loop that periodically checks its identity and,
@@ -209,6 +247,8 @@ def start_daemon(agent, test=False):
     [test] (bool) - Used in unit testing to avoid infinite loop
     """
     while True:
+        if agent.clock_jumped():
+            agent.fix_clock()
         same_id = agent.check_identity()
         if not same_id:
             logging.info('Identity has changed!')
