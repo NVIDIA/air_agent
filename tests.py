@@ -160,6 +160,7 @@ class TestAgent(TestCase):
         mock_datetime.now = MagicMock(return_value=datetime(2020, 3, 1))
         res = self.agent.clock_jumped()
         self.assertFalse(res)
+        self.assertEqual(self.agent.clock, mock_datetime.now())
 
     @patch('subprocess.run')
     @patch('agent.restart_ntp')

@@ -249,6 +249,8 @@ def start_daemon(agent, test=False):
     while True:
         if agent.clock_jumped():
             agent.fix_clock()
+        else:
+            agent.clock = datetime.now()
         same_id = agent.check_identity()
         if not same_id:
             logging.info('Identity has changed!')
