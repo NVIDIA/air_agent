@@ -62,9 +62,7 @@ class TestAgentIdentity(TestCase):
         mock_log.assert_called_with('Failed to find identity file')
 
 class TestAgent(TestCase):
-    @patch('agent.datetime')
-    def setUp(self, mock_datetime):
-        mock_datetime.now = MagicMock(return_value=datetime(2020, 3, 1))
+    def setUp(self):
         self.mock_id = MagicMock(return_value='123-456')
         Agent.get_identity = self.mock_id
         self.agent = Agent(MOCK_CONFIG)
@@ -73,7 +71,6 @@ class TestAgent(TestCase):
         self.assertDictEqual(self.agent.config, MOCK_CONFIG)
         self.mock_id.assert_called()
         self.assertEqual(self.agent.identity, '123-456')
-        self.assertEqual(self.agent.clock, datetime(2020, 3, 1))
 
     def test_check_identity(self):
         res = self.agent.check_identity()
@@ -143,43 +140,6 @@ class TestAgent(TestCase):
         self.agent.delete_instructions()
         mock_log.assert_called_with('Failed to delete post-clone instructions')
 
-    @patch('agent.datetime')
-    def test_clock_jumped_past(self, mock_datetime):
-        mock_datetime.now = MagicMock(return_value=datetime(2020, 2, 1))
-        res = self.agent.clock_jumped()
-        self.assertTrue(res)
-
-    @patch('agent.datetime')
-    def test_clock_jumped_future(self, mock_datetime):
-        mock_datetime.now = MagicMock(return_value=datetime(2020, 4, 1))
-        res = self.agent.clock_jumped()
-        self.assertTrue(res)
-
-    @patch('agent.datetime')
-    def test_clock_jumped_no_jump(self, mock_datetime):
-        mock_datetime.now = MagicMock(return_value=datetime(2020, 3, 1))
-        res = self.agent.clock_jumped()
-        self.assertFalse(res)
-        self.assertEqual(self.agent.clock, mock_datetime.now())
-
-    @patch('subprocess.run')
-    @patch('agent.restart_ntp')
-    @patch('agent.datetime')
-    def test_fix_clock(self, mock_datetime, mock_ntp, mock_run):
-        mock_datetime.now = MagicMock(return_value=datetime(2020, 3, 2))
-        self.agent.fix_clock()
-        mock_run.assert_called_with('hwclock -s', shell=True)
-        mock_ntp.assert_called()
-        self.assertEqual(self.agent.clock, datetime(2020, 3, 2))
-
-    @patch('subprocess.run', side_effect=Exception)
-    @patch('logging.error')
-    def test_fix_clock_failed(self, mock_log, mock_run):
-        start_clock = self.agent.clock
-        self.agent.fix_clock()
-        mock_log.assert_called_with('Failed to fix clock')
-        self.assertEqual(self.agent.clock, start_clock)
-
 class TestAgentFunctions(TestCase):
     class MockConfigParser(dict):
         def __init__(self):
@@ -231,13 +191,13 @@ class TestAgentFunctions(TestCase):
         agent_obj.check_identity = MagicMock(return_value=False)
         agent_obj.delete_instructions = MagicMock()
         agent_obj.get_instructions = MagicMock(return_value=[{'data': 'foo', 'executor': 'shell'}])
-        agent_obj.clock_jumped = MagicMock(return_value=True)
-        agent_obj.fix_clock = MagicMock()
+        agent.clock_jumped = MagicMock(return_value=True)
+        agent.fix_clock = MagicMock()
         agent.start_daemon(agent_obj, test=True)
         mock_exec.EXECUTOR_MAP['shell'].assert_called_with('foo')
         agent_obj.delete_instructions.assert_called()
         mock_sleep.assert_called_with(MOCK_CONFIG['CHECK_INTERVAL'])
-        agent_obj.fix_clock.assert_called()
+        agent.fix_clock.assert_called()
 
     @patch('agent.executors')
     @patch('agent.sleep')
@@ -312,6 +272,55 @@ class TestAgentFunctions(TestCase):
         mock_for_assert('systemctl restart chrony.service', shell=True)
         agent.restart_ntp()
         self.assertEqual(mock_call.mock_calls, mock_for_assert.mock_calls)
+
+    @patch('subprocess.check_output', return_value=b' 10000 seconds since 1969')
+    @patch('agent.datetime')
+    def test_clock_jumped_past(self, mock_datetime, mock_sub):
+        mock_datetime.now = MagicMock(return_value=datetime(2020, 2, 1))
+        mock_datetime.fromtimestamp = datetime.fromtimestamp
+        res = agent.clock_jumped()
+        self.assertTrue(res)
+
+    @patch('subprocess.check_output', return_value=b' 99999999999999 seconds since 1969')
+    @patch('agent.datetime')
+    def test_clock_jumped_future(self, mock_datetime, mock_sub):
+        mock_datetime.now = MagicMock(return_value=datetime(2020, 4, 1))
+        mock_datetime.fromtimestamp = datetime.fromtimestamp
+        res = agent.clock_jumped()
+        self.assertTrue(res)
+
+    @patch('subprocess.check_output', return_value=b' 1583038800 seconds since 1969')
+    @patch('agent.datetime')
+    def test_clock_jumped_no_jump(self, mock_datetime, mock_sub):
+        mock_datetime.now = MagicMock(return_value=datetime(2020, 3, 1))
+        mock_datetime.fromtimestamp = datetime.fromtimestamp
+        res = agent.clock_jumped()
+        self.assertFalse(res)
+
+    @patch('subprocess.check_output', side_effect=Exception)
+    @patch('agent.datetime')
+    @patch('logging.warning')
+    def test_clock_jumped_exception(self, mock_log, mock_datetime, mock_sub):
+        mock_datetime.now = MagicMock(return_value=datetime(2020, 3, 1))
+        mock_datetime.fromtimestamp = datetime.fromtimestamp
+        res = agent.clock_jumped()
+        self.assertTrue(res)
+        mock_log.assert_called_with('Something went wrong. Syncing clock to be safe...')
+
+    @patch('subprocess.run')
+    @patch('agent.restart_ntp')
+    @patch('agent.datetime')
+    def test_fix_clock(self, mock_datetime, mock_ntp, mock_run):
+        mock_datetime.now = MagicMock(return_value=datetime(2020, 3, 2))
+        agent.fix_clock()
+        mock_run.assert_called_with('hwclock -s', shell=True)
+        mock_ntp.assert_called()
+
+    @patch('subprocess.run', side_effect=Exception)
+    @patch('logging.error')
+    def test_fix_clock_failed(self, mock_log, mock_run):
+        agent.fix_clock()
+        mock_log.assert_called_with('Failed to fix clock')
 
 class TestExecutors(TestCase):
     @patch('subprocess.run')
