@@ -28,9 +28,8 @@ class Agent:
     """
     def __init__(self, config):
         self.config = config
-        self.clock = datetime.now()
         self.identity = self.get_identity()
-        logging.info(f'Initializing with identity {self.identity} at {self.clock}')
+        logging.info(f'Initializing with identity {self.identity}')
         parse_instructions(self)
 
     def get_identity(self):
@@ -129,6 +128,8 @@ class Agent:
         url = self.config['AIR_API']
         url += f'simulation-node/{identity}/instructions/'
         try:
+            if not identity:
+                raise Exception('No identity')
             res = requests.get(url)
             instructions = res.json()
         except:
@@ -154,12 +155,23 @@ class Agent:
 
     def clock_jumped(self):
         """
-        Returns True if the system's time has jumped by +/- 5 minutes since the last recorded time
+        Returns True if the system's time has drifted by +/- 30 seconds from the hardware clock
         """
-        now = datetime.now()
-        delta = now - self.clock
-        logging.debug(f'Last run: {self.clock}, Now: {now}, Delta: {delta}')
-        return (delta > timedelta(minutes=5)) or (-delta > timedelta(minutes=5))
+        system_time = datetime.now()
+        try:
+            hwclock_output = subprocess.check_output('hwclock -D | grep "Hw clock"', shell=True)
+            match = re.match(r'.* (\d+) seconds since 1969', hwclock_output.decode('utf-8'))
+            if match:
+                hw_time = datetime.fromtimestamp(int(match.groups()[0]))
+            else:
+                raise Exception('Unable to parse hardware clock')
+        except:
+            logging.debug(traceback.format_exc())
+            hw_time = datetime.fromtimestamp(0)
+            logging.warning('Something went wrong. Syncing clock to be safe...')
+        delta = system_time - hw_time
+        logging.debug(f'System time: {system_time}, Hardware time: {hw_time}, Delta: {delta}')
+        return (delta > timedelta(seconds=30)) or (-delta > timedelta(seconds=30))
 
     def fix_clock(self):
         """
@@ -170,7 +182,6 @@ class Agent:
             logging.info('Syncing clock from hypervisor')
             subprocess.run('hwclock -s', shell=True) # sync from hardware
             restart_ntp()
-            self.clock = datetime.now()
         except:
             logging.debug(traceback.format_exc())
             logging.error('Failed to fix clock')
@@ -249,8 +260,6 @@ def start_daemon(agent, test=False):
     while True:
         if agent.clock_jumped():
             agent.fix_clock()
-        else:
-            agent.clock = datetime.now()
         same_id = agent.check_identity()
         if not same_id:
             logging.info('Identity has changed!')
