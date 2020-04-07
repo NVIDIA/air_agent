@@ -335,3 +335,34 @@ class TestExecutors(TestCase):
         res = executors.shell('foo\nbar\n')
         self.assertFalse(res)
         mock_log.assert_called_with('Command `foo` failed')
+
+    @patch('builtins.open')
+    @patch('subprocess.run')
+    def test_file(self, mock_run, mock_open):
+        outfile = MagicMock()
+        outfile.write = MagicMock()
+        mock_open.return_value.__enter__.return_value = outfile
+        res = executors.file('{"/tmp/foo.txt": "bar", "post_cmd": ["cat /tmp/foo.txt"]}')
+        self.assertTrue(res)
+        mock_open.assert_called_with('/tmp/foo.txt', 'w')
+        outfile.write.assert_called_with('bar')
+        mock_run.assert_called_with('cat /tmp/foo.txt', shell=True, check=True)
+
+    @patch('builtins.open', side_effect=Exception)
+    @patch('logging.error')
+    @patch('subprocess.run')
+    def test_file_write_failed(self, mock_run, mock_log, mock_open):
+        res = executors.file('{"/tmp/foo.txt": "bar", "post_cmd": ["cat /tmp/foo.txt"]}')
+        self.assertFalse(res)
+        mock_log.assert_called_with('Failed to write /tmp/foo.txt')
+
+    @patch('builtins.open')
+    @patch('subprocess.run', side_effect=Exception)
+    @patch('logging.error')
+    def test_file_cmd_failed(self, mock_log, mock_run, mock_open):
+        outfile = MagicMock()
+        outfile.write = MagicMock()
+        mock_open.return_value.__enter__.return_value = outfile
+        res = executors.file('{"/tmp/foo.txt": "bar", "post_cmd": ["cat /tmp/foo.txt"]}')
+        self.assertFalse(res)
+        mock_log.assert_called_with('post_cmd `cat /tmp/foo.txt` failed')

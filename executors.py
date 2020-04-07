@@ -2,6 +2,7 @@
 Executor functions for post-clone instructions
 """
 
+import json
 import logging
 import subprocess
 import traceback
@@ -26,4 +27,39 @@ def shell(instructions):
             return False
     return True
 
-EXECUTOR_MAP = {'shell': shell}
+def file(instructions):
+    """
+    Executor for file transfers
+
+    Arguments:
+    instructions (dict) - A dictionary in the form of {'filename': 'contents', 'post_cmd': ['cmd']}
+
+    Returns:
+    bool - True if all files were copied and all post_cmds were executed successfully
+    """
+    success = True
+    post_cmd = []
+    json_data = json.loads(instructions)
+    if 'post_cmd' in json_data.keys():
+        post_cmd = json_data.pop('post_cmd')
+    for filename, content in json_data.items():
+        logging.info(f'EXEC file :: writing {filename}')
+        logging.debug(content)
+        try:
+            with open(filename, 'w') as outfile:
+                outfile.write(content)
+        except:
+            logging.debug(traceback.format_exc())
+            logging.error(f'Failed to write {filename}')
+            success = False
+    for cmd in post_cmd:
+        logging.info(f'EXEC file :: {cmd}')
+        try:
+            subprocess.run(cmd, shell=True, check=True)
+        except:
+            logging.debug(traceback.format_exc())
+            logging.error(f'post_cmd `{cmd}` failed')
+            success = False
+    return success
+
+EXECUTOR_MAP = {'file': file, 'shell': shell}
