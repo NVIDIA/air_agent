@@ -220,7 +220,6 @@ def clock_jumped():
     Returns True if the system's time has drifted by +/- 30 seconds from the hardware clock
     """
     system_time = datetime.now()
-    logging.getLogger().setLevel('DEBUG')
     try:
         hwclock_output = subprocess.check_output('hwclock -D | grep "Hw clock"', shell=True)
         match = re.match(r'.* (\d+) seconds since 1969', hwclock_output.decode('utf-8'))
