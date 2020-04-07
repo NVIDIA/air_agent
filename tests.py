@@ -292,7 +292,7 @@ class TestAgentFunctions(TestCase):
     @patch('subprocess.check_output', return_value=b' 1583038800 seconds since 1969')
     @patch('agent.datetime')
     def test_clock_jumped_no_jump(self, mock_datetime, mock_sub):
-        mock_datetime.now = MagicMock(return_value=datetime(2020, 3, 1))
+        mock_datetime.now = MagicMock(return_value=datetime.fromtimestamp(1583038800))
         mock_datetime.fromtimestamp = datetime.fromtimestamp
         res = agent.clock_jumped()
         self.assertFalse(res)
