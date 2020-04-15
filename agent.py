@@ -121,7 +121,7 @@ class Agent:
         Fetches a set of post-clone instructions from the AIR API
 
         Returns:
-        list - A list of instructions
+        list - A list of instructions on success, or False if an error occurred
         """
         logging.debug('Getting post-clone instructions')
         identity = self.get_identity()
@@ -135,7 +135,7 @@ class Agent:
         except:
             logging.error('Failed to get post-clone instructions')
             logging.debug(traceback.format_exc())
-            return {}
+            return False
         instructions = self.decrypt_instructions(instructions, identity)
         return instructions
 
@@ -191,7 +191,11 @@ def parse_instructions(agent):
     agent (Agent) - An Agent instance
     """
     results = []
-    instructions = agent.get_instructions()
+    instructions = False
+    while instructions is False:
+        instructions = agent.get_instructions()
+        if instructions is False:
+            sleep(30)
     for instruction in instructions:
         executor = instruction['executor']
         if executor in executors.EXECUTOR_MAP.keys():

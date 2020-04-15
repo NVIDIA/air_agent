@@ -22,7 +22,8 @@ class TestAgentIdentity(TestCase):
     @patch('subprocess.run')
     @patch('glob.glob', return_value=['./uuid_123.txt'])
     @patch('builtins.open')
-    def test_get_identity(self, mock_open, mock_glob, mock_run):
+    @patch('agent.parse_instructions')
+    def test_get_identity(self, mock_parse, mock_open, mock_glob, mock_run):
         mock_file = MagicMock()
         mock_file.read = MagicMock(return_value='ABC\n')
         mock_open.return_value.__enter__.return_value = mock_file
@@ -55,14 +56,16 @@ class TestAgentIdentity(TestCase):
     @patch('subprocess.run')
     @patch('glob.glob', return_value=[])
     @patch('logging.error')
-    def test_get_identity_no_file(self, mock_log, mock_glob, mock_run):
+    @patch('agent.parse_instructions')
+    def test_get_identity_no_file(self, mock_parse, mock_log, mock_glob, mock_run):
         agent_obj = Agent(MOCK_CONFIG)
         res = agent_obj.get_identity()
         self.assertIsNone(res)
         mock_log.assert_called_with('Failed to find identity file')
 
 class TestAgent(TestCase):
-    def setUp(self):
+    @patch('agent.parse_instructions')
+    def setUp(self, mock_parse):
         self.mock_id = MagicMock(return_value='123-456')
         Agent.get_identity = self.mock_id
         self.agent = Agent(MOCK_CONFIG)
@@ -125,8 +128,14 @@ class TestAgent(TestCase):
         self.mock_id.return_value = '000-000'
         self.agent.decrypt_instructions = MagicMock(return_value=instructions)
         res = self.agent.get_instructions()
-        self.assertDictEqual(res, {})
+        self.assertEqual(res, False)
         mock_log.assert_called_with('Failed to get post-clone instructions')
+
+    @patch('agent.Agent.get_identity', return_value=False)
+    @patch('builtins.Exception')
+    def test_get_instructions_no_identity(self, mock_exception, mock_identity):
+        self.agent.get_instructions()
+        mock_exception.assert_called_with('No identity')
 
     @patch('requests.delete')
     def test_delete_instructions(self, mock_delete):
@@ -184,13 +193,13 @@ class TestAgentFunctions(TestCase):
 
     @patch('agent.executors')
     @patch('agent.sleep')
-    def test_start_daemon(self, mock_sleep, mock_exec):
+    @patch('agent.Agent.get_instructions', return_value=[{'data': 'foo', 'executor': 'shell'}])
+    def test_start_daemon(self, mock_parse, mock_sleep, mock_exec):
         mock_exec.EXECUTOR_MAP = {'shell': MagicMock()}
         Agent.get_identity = MagicMock(return_value='123-456')
         agent_obj = Agent(MOCK_CONFIG)
         agent_obj.check_identity = MagicMock(return_value=False)
         agent_obj.delete_instructions = MagicMock()
-        agent_obj.get_instructions = MagicMock(return_value=[{'data': 'foo', 'executor': 'shell'}])
         agent.clock_jumped = MagicMock(return_value=True)
         agent.fix_clock = MagicMock()
         agent.start_daemon(agent_obj, test=True)
@@ -201,7 +210,8 @@ class TestAgentFunctions(TestCase):
 
     @patch('agent.executors')
     @patch('agent.sleep')
-    def test_start_daemon_no_change(self, mock_sleep, mock_exec):
+    @patch('agent.parse_instructions')
+    def test_start_daemon_no_change(self, mock_parse, mock_sleep, mock_exec):
         Agent.get_identity = MagicMock(return_value='123-456')
         agent_obj = Agent(MOCK_CONFIG)
         agent_obj.get_instructions = MagicMock()
@@ -211,7 +221,8 @@ class TestAgentFunctions(TestCase):
 
     @patch('agent.executors')
     @patch('agent.sleep')
-    def test_start_daemon_no_jump(self, mock_sleep, mock_exec):
+    @patch('agent.parse_instructions')
+    def test_start_daemon_no_jump(self, mock_parse, mock_sleep, mock_exec):
         mock_exec.EXECUTOR_MAP = {'shell': MagicMock()}
         Agent.get_identity = MagicMock(return_value='123-456')
         agent_obj = Agent(MOCK_CONFIG)
@@ -225,13 +236,13 @@ class TestAgentFunctions(TestCase):
 
     @patch('agent.executors')
     @patch('agent.sleep')
-    def test_start_daemon_command_failed(self, mock_sleep, mock_exec):
+    @patch('agent.Agent.get_instructions', return_value=[{'data': 'foo', 'executor': 'shell'}])
+    def test_start_daemon_command_failed(self, mock_parse, mock_sleep, mock_exec):
         mock_exec.EXECUTOR_MAP = {'shell': MagicMock(return_value=False)}
         Agent.get_identity = MagicMock(return_value='123-456')
         agent_obj = Agent(MOCK_CONFIG)
         agent_obj.check_identity = MagicMock(return_value=False)
         agent_obj.delete_instructions = MagicMock()
-        agent_obj.get_instructions = MagicMock(return_value=[{'data': 'foo', 'executor': 'shell'}])
         agent.start_daemon(agent_obj, test=True)
         mock_exec.EXECUTOR_MAP['shell'].assert_called_with('foo')
         agent_obj.delete_instructions.assert_not_called()
@@ -261,6 +272,14 @@ class TestAgentFunctions(TestCase):
         mock_agent.get_instructions.return_value = [{'executor': 'test', 'data': 'foo'}]
         agent.parse_instructions(mock_agent)
         mock_log.assert_called_with('Received unsupported executor test')
+
+    @patch('agent.sleep')
+    def test_parse_instructions_failed(self, mock_sleep):
+        mock_agent = MagicMock()
+        mock_agent.get_instructions.side_effect = [False, []]
+        agent.parse_instructions(mock_agent)
+        mock_sleep.assert_called_with(30)
+        self.assertEqual(mock_agent.get_instructions.call_count, 2)
 
     @patch('subprocess.check_output',
            return_value=b'ntp.service\nfoo.service\nntp@mgmt.service\nchrony.service')
@@ -306,6 +325,12 @@ class TestAgentFunctions(TestCase):
         res = agent.clock_jumped()
         self.assertTrue(res)
         mock_log.assert_called_with('Something went wrong. Syncing clock to be safe...')
+
+    @patch('subprocess.check_output', return_value=b'foo')
+    @patch('builtins.Exception')
+    def test_clock_jumped_raised(self, mock_exception, mock_sub):
+        agent.clock_jumped()
+        mock_exception.assert_called_with('Unable to parse hardware clock')
 
     @patch('subprocess.run')
     @patch('agent.restart_ntp')
