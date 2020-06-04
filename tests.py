@@ -1,7 +1,8 @@
 """
 Unit tests for Agent module
 """
-#pylint: disable=unused-argument,missing-class-docstring,missing-function-docstring,arguments-differ,no-self-use
+#pylint: disable=unused-argument,missing-class-docstring,missing-function-docstring
+#pylint: disable=arguments-differ,no-self-use,too-many-public-methods
 
 import subprocess
 from datetime import datetime
@@ -242,10 +243,12 @@ class TestAgentFunctions(TestCase):
         Agent.get_identity = MagicMock(return_value='123-456')
         agent_obj = Agent(MOCK_CONFIG)
         agent_obj.check_identity = MagicMock(return_value=False)
+        agent_obj.identity = '000-000'
         agent_obj.delete_instructions = MagicMock()
         agent.start_daemon(agent_obj, test=True)
         mock_exec.EXECUTOR_MAP['shell'].assert_called_with('foo')
         agent_obj.delete_instructions.assert_not_called()
+        self.assertEqual(agent_obj.identity, '000-000')
 
     @patch('agent.executors')
     def test_parse_instructions(self, mock_exec):
@@ -256,6 +259,7 @@ class TestAgentFunctions(TestCase):
             {'executor': 'shell', 'data': 'bar'}
         ]
         mock_agent.delete_instructions = MagicMock()
+        mock_agent.identity = 'xzy'
         mock_agent.get_identity = MagicMock(return_value='abc')
         agent.parse_instructions(mock_agent)
         mock_agent.delete_instructions.assert_called()
@@ -263,6 +267,7 @@ class TestAgentFunctions(TestCase):
         mock_for_assert('foo')
         mock_for_assert('bar')
         self.assertEqual(mock_exec.EXECUTOR_MAP['shell'].mock_calls, mock_for_assert.mock_calls)
+        self.assertEqual(mock_agent.identity, 'abc')
 
     @patch('agent.executors')
     @patch('logging.warning')
@@ -280,6 +285,44 @@ class TestAgentFunctions(TestCase):
         agent.parse_instructions(mock_agent)
         mock_sleep.assert_called_with(30)
         self.assertEqual(mock_agent.get_instructions.call_count, 2)
+
+    @patch('agent.executors')
+    @patch('logging.warning')
+    @patch('agent.sleep')
+    def test_parse_instructions_cmd_failed(self, mock_sleep, mock_log, mock_exec):
+        mock_exec.EXECUTOR_MAP = {'shell': MagicMock(side_effect=[False, False, True])}
+        mock_agent = MagicMock()
+        mock_agent.get_instructions.return_value = [{'executor': 'shell', 'data': 'foo'}]
+        mock_agent.get_identity = MagicMock(return_value='abc')
+        agent.parse_instructions(mock_agent)
+        assert_logs = MagicMock()
+        assert_logs.warning('Failed to execute all instructions on attempt #1. ' + \
+                            'Retrying in 10 seconds...')
+        assert_logs.warning('Failed to execute all instructions on attempt #2. ' + \
+                            'Retrying in 20 seconds...')
+        self.assertEqual(mock_log.mock_calls, assert_logs.mock_calls)
+        assert_sleep = MagicMock()
+        assert_sleep(10)
+        assert_sleep(20)
+        self.assertEqual(mock_sleep.mock_calls, assert_sleep.mock_calls)
+        mock_agent.get_identity.assert_called()
+
+    @patch('agent.executors')
+    @patch('logging.error')
+    @patch('agent.sleep')
+    def test_parse_instructions_all_cmd_failed(self, mock_sleep, mock_log, mock_exec):
+        mock_exec.EXECUTOR_MAP = {'shell': MagicMock(return_value=False)}
+        mock_agent = MagicMock()
+        mock_agent.get_instructions.return_value = [{'executor': 'shell', 'data': 'foo'}]
+        mock_agent.get_identity = MagicMock(return_value='abc')
+        agent.parse_instructions(mock_agent)
+        assert_sleep = MagicMock()
+        assert_sleep(10)
+        assert_sleep(20)
+        assert_sleep(30)
+        self.assertEqual(mock_sleep.mock_calls, assert_sleep.mock_calls)
+        mock_agent.get_identity.assert_not_called()
+        mock_log.assert_called_with('Failed to execute all instructions. Giving up.')
 
     @patch('subprocess.check_output',
            return_value=b'ntp.service\nfoo.service\nntp@mgmt.service\nchrony.service')

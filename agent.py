@@ -183,7 +183,7 @@ def parse_args():
                         default='/etc/cumulus-air/agent.ini')
     return parser.parse_args()
 
-def parse_instructions(agent):
+def parse_instructions(agent, attempt=1):
     """
     Parses and executes a set of instructions from the AIR API
 
@@ -203,8 +203,17 @@ def parse_instructions(agent):
         else:
             logging.warning(f'Received unsupported executor {executor}')
     if len(results) > 0 and all(results):
+        logging.debug('All instructions executed successfully')
         agent.delete_instructions()
         agent.identity = agent.get_identity()
+    elif len(results) > 0 and attempt <= 3:
+        backoff = attempt * 10
+        logging.warning(f'Failed to execute all instructions on attempt #{attempt}. ' + \
+                        f'Retrying in {backoff} seconds...')
+        sleep(backoff)
+        parse_instructions(agent, attempt + 1)
+    elif len(results) > 0:
+        logging.error('Failed to execute all instructions. Giving up.')
 
 def restart_ntp():
     """
