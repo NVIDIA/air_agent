@@ -46,7 +46,7 @@ class Agent:
         except subprocess.CalledProcessError:
             logging.debug(f'{key_dir} is not mounted')
         try:
-            subprocess.run(f'mount -a 2>/dev/null', shell=True)
+            subprocess.run('mount -a 2>/dev/null', shell=True)
         except:
             logging.error(f'Failed to refresh {key_dir}')
             logging.debug(traceback.format_exc())
@@ -58,7 +58,7 @@ class Agent:
             with open(uuid_path) as uuid_file:
                 return uuid_file.read().strip().lower()
         else:
-            logging.error(f'Failed to find identity file')
+            logging.error('Failed to find identity file')
             return None
 
     def check_identity(self):
