@@ -12,6 +12,7 @@ import logging
 import re
 import subprocess
 import sys
+import threading
 import traceback
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -132,11 +133,13 @@ class Agent:
                 raise Exception('No identity')
             res = requests.get(url)
             instructions = res.json()
+            logging.debug(f'Encrypted instructions: {instructions}')
         except:
             logging.error('Failed to get post-clone instructions')
             logging.debug(traceback.format_exc())
             return False
         instructions = self.decrypt_instructions(instructions, identity)
+        logging.debug(f'Decrypted instructions: {instructions}')
         return instructions
 
     def delete_instructions(self):
@@ -152,6 +155,51 @@ class Agent:
         except:
             logging.error('Failed to delete post-clone instructions')
             logging.debug(traceback.format_exc())
+
+    def signal_watch(self, attempt=1, test=False):
+        """
+        Waits for a signal from the AIR Worker and proceeds accordingly. This runs in a loop
+        so it is intended to be executed in a separate thread.
+
+        Arguments:
+        attempt [int] - The attempt number used for retries
+        test [bool] - Used for CI testing to avoid infinite loops (default: False)
+        """
+        try:
+            channel = open(self.config['CHANNEL_PATH'], 'wb+', buffering=0)
+            logging.debug(f'Opened channel path {self.config["CHANNEL_PATH"]}')
+            while True:
+                data = channel.read(1024).decode('utf-8')
+                logging.debug(f'Got signal data {data}')
+                signal = None
+                if data:
+                    (timestamp, signal) = data.split(':')
+                if signal == 'checkinst\n':
+                    logging.debug('signal_watch :: Checking for instructions')
+                    res = parse_instructions(self)
+                    if res:
+                        logging.debug('Channel success')
+                        channel.write(f'{timestamp}:success\n'.encode('utf-8'))
+                    else:
+                        logging.debug('Channel error')
+                        channel.write(f'{timestamp}:error\n'.encode('utf-8'))
+                sleep(1)
+                if test:
+                    break
+        except Exception as err:
+            try:
+                channel.close()
+            except Exception:
+                pass
+            logging.debug(traceback.format_exc())
+            if attempt <= 3:
+                backoff = attempt * 10
+                logging.warning(f'signal_watch :: {err} (attempt #{attempt}). ' + \
+                                f'Trying again in {backoff} seconds...')
+                sleep(backoff)
+                self.signal_watch(attempt + 1, test=test)
+            else:
+                logging.error(f'signal_watch :: {err}. Ending thread.')
 
 def load_config(config_file):
     """
@@ -189,6 +237,7 @@ def parse_instructions(agent, attempt=1):
 
     Arguments:
     agent (Agent) - An Agent instance
+    attempt [int] - The attempt number used for retries
     """
     results = []
     instructions = False
@@ -206,14 +255,16 @@ def parse_instructions(agent, attempt=1):
         logging.debug('All instructions executed successfully')
         agent.delete_instructions()
         agent.identity = agent.get_identity()
-    elif len(results) > 0 and attempt <= 3:
+        return True
+    if len(results) > 0 and attempt <= 3:
         backoff = attempt * 10
         logging.warning(f'Failed to execute all instructions on attempt #{attempt}. ' + \
                         f'Retrying in {backoff} seconds...')
         sleep(backoff)
-        parse_instructions(agent, attempt + 1)
-    elif len(results) > 0:
+        return parse_instructions(agent, attempt + 1)
+    if len(results) > 0:
         logging.error('Failed to execute all instructions. Giving up.')
+    return False
 
 def restart_ntp():
     """
@@ -270,6 +321,7 @@ def start_daemon(agent, test=False):
     agent (Agent) - An Agent instance
     [test] (bool) - Used in unit testing to avoid infinite loop
     """
+    threading.Thread(target=agent.signal_watch).start()
     while True:
         if clock_jumped():
             fix_clock()

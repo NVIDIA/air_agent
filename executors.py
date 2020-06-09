@@ -39,7 +39,12 @@ def file(instructions):
     """
     success = True
     post_cmd = []
-    json_data = json.loads(instructions)
+    try:
+        json_data = json.loads(instructions)
+    except json.decoder.JSONDecodeError as err:
+        logging.error(f'Failed to decode instructions as JSON: {err}')
+        return False
+
     if 'post_cmd' in json_data.keys():
         post_cmd = json_data.pop('post_cmd')
     for filename, content in json_data.items():

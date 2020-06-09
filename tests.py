@@ -16,7 +16,7 @@ import executors
 from agent import Agent
 
 MOCK_INI = {'AGENT': {'CHECK_INTERVAL': 60, 'AIR_API': 'http://localhost:8000', 'KEY_DIR': './',
-                      'LOG_LEVEL': 'DEBUG'}}
+                      'LOG_LEVEL': 'DEBUG', 'CHANNEL_PATH': '/dev/virtio-ports/air'}}
 MOCK_CONFIG = MOCK_INI['AGENT']
 
 class TestAgentIdentity(TestCase):
@@ -150,6 +150,47 @@ class TestAgent(TestCase):
         self.agent.delete_instructions()
         mock_log.assert_called_with('Failed to delete post-clone instructions')
 
+    @patch('builtins.open')
+    @patch('agent.parse_instructions', return_value=True)
+    @patch('agent.sleep')
+    def test_signal_watch(self, mock_sleep, mock_parse, mock_open):
+        mock_channel = MagicMock()
+        mock_channel.read.return_value = b'123456:checkinst\n'
+        mock_open.return_value = mock_channel
+        self.agent.signal_watch(test=True)
+        mock_open.assert_called_with(self.agent.config['CHANNEL_PATH'], 'wb+', buffering=0)
+        mock_channel.read.assert_called_with(1024)
+        mock_parse.assert_called_with(self.agent)
+        mock_channel.write.assert_called_with('123456:success\n'.encode('utf-8'))
+        mock_sleep.assert_called_with(1)
+
+    @patch('builtins.open')
+    @patch('agent.parse_instructions')
+    @patch('agent.sleep')
+    def test_signal_watch_unknown_signal(self, mock_sleep, mock_parse, mock_open):
+        mock_channel = MagicMock()
+        mock_channel.read.return_value = b'123456:foo\n'
+        mock_open.return_value = mock_channel
+        self.agent.signal_watch(test=True)
+        mock_parse.assert_not_called()
+        mock_channel.write.assert_not_called()
+
+    @patch('builtins.open')
+    @patch('agent.parse_instructions', return_value=False)
+    @patch('agent.sleep')
+    def test_signal_watch_error(self, mock_sleep, mock_parse, mock_open):
+        mock_channel = MagicMock()
+        mock_channel.read.return_value = b'123456:checkinst\n'
+        mock_open.return_value = mock_channel
+        self.agent.signal_watch(test=True)
+        mock_channel.write.assert_called_with('123456:error\n'.encode('utf-8'))
+
+    @patch('builtins.open', side_effect=Exception('foo'))
+    @patch('agent.sleep')
+    def test_signal_watch_exception(self, mock_sleep, mock_open):
+        self.agent.signal_watch(attempt=3, test=True)
+        mock_sleep.assert_called_with(30)
+
 class TestAgentFunctions(TestCase):
     class MockConfigParser(dict):
         def __init__(self):
@@ -195,7 +236,10 @@ class TestAgentFunctions(TestCase):
     @patch('agent.executors')
     @patch('agent.sleep')
     @patch('agent.Agent.get_instructions', return_value=[{'data': 'foo', 'executor': 'shell'}])
-    def test_start_daemon(self, mock_parse, mock_sleep, mock_exec):
+    @patch('threading.Thread')
+    def test_start_daemon(self, mock_threading, mock_parse, mock_sleep, mock_exec):
+        mock_thread = MagicMock()
+        mock_threading.return_value = mock_thread
         mock_exec.EXECUTOR_MAP = {'shell': MagicMock()}
         Agent.get_identity = MagicMock(return_value='123-456')
         agent_obj = Agent(MOCK_CONFIG)
@@ -208,11 +252,14 @@ class TestAgentFunctions(TestCase):
         agent_obj.delete_instructions.assert_called()
         mock_sleep.assert_called_with(MOCK_CONFIG['CHECK_INTERVAL'])
         agent.fix_clock.assert_called()
+        mock_threading.assert_called_with(target=agent_obj.signal_watch)
+        mock_thread.start.assert_called()
 
     @patch('agent.executors')
     @patch('agent.sleep')
     @patch('agent.parse_instructions')
-    def test_start_daemon_no_change(self, mock_parse, mock_sleep, mock_exec):
+    @patch('threading.Thread')
+    def test_start_daemon_no_change(self, mock_threading, mock_parse, mock_sleep, mock_exec):
         Agent.get_identity = MagicMock(return_value='123-456')
         agent_obj = Agent(MOCK_CONFIG)
         agent_obj.get_instructions = MagicMock()
@@ -223,7 +270,8 @@ class TestAgentFunctions(TestCase):
     @patch('agent.executors')
     @patch('agent.sleep')
     @patch('agent.parse_instructions')
-    def test_start_daemon_no_jump(self, mock_parse, mock_sleep, mock_exec):
+    @patch('threading.Thread')
+    def test_start_daemon_no_jump(self, mock_threading, mock_parse, mock_sleep, mock_exec):
         mock_exec.EXECUTOR_MAP = {'shell': MagicMock()}
         Agent.get_identity = MagicMock(return_value='123-456')
         agent_obj = Agent(MOCK_CONFIG)
@@ -238,7 +286,8 @@ class TestAgentFunctions(TestCase):
     @patch('agent.executors')
     @patch('agent.sleep')
     @patch('agent.Agent.get_instructions', return_value=[{'data': 'foo', 'executor': 'shell'}])
-    def test_start_daemon_command_failed(self, mock_parse, mock_sleep, mock_exec):
+    @patch('threading.Thread')
+    def test_start_daemon_command_failed(self, mock_threading, mock_parse, mock_sleep, mock_exec):
         mock_exec.EXECUTOR_MAP = {'shell': MagicMock(return_value=False)}
         Agent.get_identity = MagicMock(return_value='123-456')
         agent_obj = Agent(MOCK_CONFIG)
@@ -434,3 +483,11 @@ class TestExecutors(TestCase):
         res = executors.file('{"/tmp/foo.txt": "bar", "post_cmd": ["cat /tmp/foo.txt"]}')
         self.assertFalse(res)
         mock_log.assert_called_with('post_cmd `cat /tmp/foo.txt` failed')
+
+    @patch('logging.error')
+    def test_file_json_parse_failed(self, mock_log):
+        data = '{"/tmp/foo.txt": "bar", "post_cmd": [cat /tmp/foo.txt"]}'
+        res = executors.file(data)
+        self.assertFalse(res)
+        mock_log.assert_called_with('Failed to decode instructions as JSON: ' + \
+                                    'Expecting value: line 1 column 38 (char 37)')
