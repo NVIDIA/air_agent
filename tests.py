@@ -155,11 +155,11 @@ class TestAgent(TestCase):
     @patch('agent.sleep')
     def test_signal_watch(self, mock_sleep, mock_parse, mock_open):
         mock_channel = MagicMock()
-        mock_channel.read.return_value = b'123456:checkinst\n'
+        mock_channel.readline.return_value = b'123456:checkinst\n'
         mock_open.return_value = mock_channel
         self.agent.signal_watch(test=True)
         mock_open.assert_called_with(self.agent.config['CHANNEL_PATH'], 'wb+', buffering=0)
-        mock_channel.read.assert_called_with(1024)
+        mock_channel.readline.assert_called()
         mock_parse.assert_called_with(self.agent)
         mock_channel.write.assert_called_with('123456:success\n'.encode('utf-8'))
         mock_sleep.assert_called_with(1)
@@ -169,7 +169,7 @@ class TestAgent(TestCase):
     @patch('agent.sleep')
     def test_signal_watch_unknown_signal(self, mock_sleep, mock_parse, mock_open):
         mock_channel = MagicMock()
-        mock_channel.read.return_value = b'123456:foo\n'
+        mock_channel.readline.return_value = b'123456:foo\n'
         mock_open.return_value = mock_channel
         self.agent.signal_watch(test=True)
         mock_parse.assert_not_called()
@@ -180,7 +180,7 @@ class TestAgent(TestCase):
     @patch('agent.sleep')
     def test_signal_watch_error(self, mock_sleep, mock_parse, mock_open):
         mock_channel = MagicMock()
-        mock_channel.read.return_value = b'123456:checkinst\n'
+        mock_channel.readline.return_value = b'123456:checkinst\n'
         mock_open.return_value = mock_channel
         self.agent.signal_watch(test=True)
         mock_channel.write.assert_called_with('123456:error\n'.encode('utf-8'))
