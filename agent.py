@@ -169,7 +169,7 @@ class Agent:
             channel = open(self.config['CHANNEL_PATH'], 'wb+', buffering=0)
             logging.debug(f'Opened channel path {self.config["CHANNEL_PATH"]}')
             while True:
-                data = channel.read(1024).decode('utf-8')
+                data = channel.readline().decode('utf-8')
                 logging.debug(f'Got signal data {data}')
                 signal = None
                 if data:
