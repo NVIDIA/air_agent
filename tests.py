@@ -204,7 +204,7 @@ class TestAgent(TestCase):
         mock_channel = MagicMock()
         self.agent.monitoring = True
         self.agent.monitor(mock_channel, file='/tmp/foo', pattern=r'(bar)', test=True)
-        mock_channel.write.assert_called_with(f'123456:bar'.encode('utf-8'))
+        mock_channel.write.assert_called_with('123456:bar'.encode('utf-8'))
 
     @patch('builtins.open')
     def test_monitor_no_file(self, mock_open):
