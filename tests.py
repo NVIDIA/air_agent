@@ -4,6 +4,7 @@ Unit tests for Agent module
 #pylint: disable=unused-argument,missing-class-docstring,missing-function-docstring
 #pylint: disable=arguments-differ,no-self-use,too-many-public-methods
 
+import json
 import subprocess
 from datetime import datetime
 from unittest import TestCase
@@ -75,6 +76,7 @@ class TestAgent(TestCase):
         self.assertDictEqual(self.agent.config, MOCK_CONFIG)
         self.mock_id.assert_called()
         self.assertEqual(self.agent.identity, '123-456')
+        self.assertFalse(self.agent.monitoring)
 
     def test_check_identity(self):
         res = self.agent.check_identity()
@@ -160,7 +162,7 @@ class TestAgent(TestCase):
         self.agent.signal_watch(test=True)
         mock_open.assert_called_with(self.agent.config['CHANNEL_PATH'], 'wb+', buffering=0)
         mock_channel.readline.assert_called()
-        mock_parse.assert_called_with(self.agent)
+        mock_parse.assert_called_with(self.agent, channel=mock_channel)
         mock_channel.write.assert_called_with('123456:success\n'.encode('utf-8'))
         mock_sleep.assert_called_with(1)
 
@@ -190,6 +192,24 @@ class TestAgent(TestCase):
     def test_signal_watch_exception(self, mock_sleep, mock_open):
         self.agent.signal_watch(attempt=3, test=True)
         mock_sleep.assert_called_with(30)
+
+    @patch('builtins.open')
+    @patch('time.time', return_value=123456.90)
+    @patch('os.path.exists', side_effect=[False, True])
+    @patch('time.sleep')
+    def test_monitor(self, mock_sleep, mock_exists, mock_time, mock_open):
+        mock_file = MagicMock()
+        mock_file.readline.return_value = 'bar\n'
+        mock_open.return_value.__enter__.return_value = mock_file
+        mock_channel = MagicMock()
+        self.agent.monitoring = True
+        self.agent.monitor(mock_channel, file='/tmp/foo', pattern=r'(bar)', test=True)
+        mock_channel.write.assert_called_with(f'123456:bar'.encode('utf-8'))
+
+    @patch('builtins.open')
+    def test_monitor_no_file(self, mock_open):
+        self.agent.monitor(MagicMock())
+        mock_open.assert_not_called()
 
 class TestAgentFunctions(TestCase):
     class MockConfigParser(dict):
@@ -235,7 +255,8 @@ class TestAgentFunctions(TestCase):
 
     @patch('agent.executors')
     @patch('agent.sleep')
-    @patch('agent.Agent.get_instructions', return_value=[{'data': 'foo', 'executor': 'shell'}])
+    @patch('agent.Agent.get_instructions', return_value=[{'data': 'foo', 'executor': 'shell',
+                                                          'monitor': None}])
     @patch('threading.Thread')
     def test_start_daemon(self, mock_threading, mock_parse, mock_sleep, mock_exec):
         mock_thread = MagicMock()
@@ -285,7 +306,8 @@ class TestAgentFunctions(TestCase):
 
     @patch('agent.executors')
     @patch('agent.sleep')
-    @patch('agent.Agent.get_instructions', return_value=[{'data': 'foo', 'executor': 'shell'}])
+    @patch('agent.Agent.get_instructions', return_value=[{'data': 'foo', 'executor': 'shell',
+                                                          'monitor': None}])
     @patch('threading.Thread')
     def test_start_daemon_command_failed(self, mock_threading, mock_parse, mock_sleep, mock_exec):
         mock_exec.EXECUTOR_MAP = {'shell': MagicMock(return_value=False)}
@@ -304,8 +326,8 @@ class TestAgentFunctions(TestCase):
         mock_exec.EXECUTOR_MAP = {'shell': MagicMock(side_effect=[1, 2])}
         mock_agent = MagicMock()
         mock_agent.get_instructions.return_value = [
-            {'executor': 'shell', 'data': 'foo'},
-            {'executor': 'shell', 'data': 'bar'}
+            {'executor': 'shell', 'data': 'foo', 'monitor': None},
+            {'executor': 'shell', 'data': 'bar', 'monitor': None}
         ]
         mock_agent.delete_instructions = MagicMock()
         mock_agent.identity = 'xzy'
@@ -323,7 +345,8 @@ class TestAgentFunctions(TestCase):
     def test_parse_instructions_unsupported(self, mock_log, mock_exec):
         mock_exec.EXECUTOR_MAP = {'shell': MagicMock(side_effect=[1, 2])}
         mock_agent = MagicMock()
-        mock_agent.get_instructions.return_value = [{'executor': 'test', 'data': 'foo'}]
+        mock_agent.get_instructions.return_value = [{'executor': 'test', 'data': 'foo',
+                                                     'monitor': None}]
         agent.parse_instructions(mock_agent)
         mock_log.assert_called_with('Received unsupported executor test')
 
@@ -341,7 +364,8 @@ class TestAgentFunctions(TestCase):
     def test_parse_instructions_cmd_failed(self, mock_sleep, mock_log, mock_exec):
         mock_exec.EXECUTOR_MAP = {'shell': MagicMock(side_effect=[False, False, True])}
         mock_agent = MagicMock()
-        mock_agent.get_instructions.return_value = [{'executor': 'shell', 'data': 'foo'}]
+        mock_agent.get_instructions.return_value = [{'executor': 'shell', 'data': 'foo',
+                                                     'monitor': None}]
         mock_agent.get_identity = MagicMock(return_value='abc')
         agent.parse_instructions(mock_agent)
         assert_logs = MagicMock()
@@ -362,7 +386,8 @@ class TestAgentFunctions(TestCase):
     def test_parse_instructions_all_cmd_failed(self, mock_sleep, mock_log, mock_exec):
         mock_exec.EXECUTOR_MAP = {'shell': MagicMock(return_value=False)}
         mock_agent = MagicMock()
-        mock_agent.get_instructions.return_value = [{'executor': 'shell', 'data': 'foo'}]
+        mock_agent.get_instructions.return_value = [{'executor': 'shell', 'data': 'foo',
+                                                     'monitor': None}]
         mock_agent.get_identity = MagicMock(return_value='abc')
         agent.parse_instructions(mock_agent)
         assert_sleep = MagicMock()
@@ -372,6 +397,22 @@ class TestAgentFunctions(TestCase):
         self.assertEqual(mock_sleep.mock_calls, assert_sleep.mock_calls)
         mock_agent.get_identity.assert_not_called()
         mock_log.assert_called_with('Failed to execute all instructions. Giving up.')
+
+    @patch('agent.executors')
+    @patch('threading.Thread')
+    def test_parse_instructions_monitor(self, mock_thread_class, mock_exec):
+        mock_thread = MagicMock()
+        mock_thread_class.return_value = mock_thread
+        monitor_str = '{"file": "/tmp/foo", "pattern": "bar"}'
+        mock_exec.EXECUTOR_MAP = {'shell': MagicMock(side_effect=[1, 2])}
+        mock_agent = MagicMock()
+        mock_agent.get_instructions.return_value = [{'executor': 'shell', 'data': 'foo',
+                                                     'monitor': monitor_str}]
+        mock_channel = MagicMock()
+        agent.parse_instructions(mock_agent, channel=mock_channel)
+        mock_thread_class.assert_called_with(target=mock_agent.monitor, args=(mock_channel,),
+                                             kwargs=json.loads(monitor_str))
+        mock_thread.start.assert_called()
 
     @patch('subprocess.check_output',
            return_value=b'ntp.service\nfoo.service\nntp@mgmt.service\nchrony.service')

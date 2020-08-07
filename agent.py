@@ -9,10 +9,12 @@ import configparser
 import glob
 import json
 import logging
+import os
 import re
 import subprocess
 import sys
 import threading
+import time
 import traceback
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -30,6 +32,7 @@ class Agent:
     def __init__(self, config):
         self.config = config
         self.identity = self.get_identity()
+        self.monitoring = False
         logging.info(f'Initializing with identity {self.identity}')
         parse_instructions(self)
 
@@ -176,7 +179,7 @@ class Agent:
                     (timestamp, signal) = data.split(':')
                 if signal == 'checkinst\n':
                     logging.debug('signal_watch :: Checking for instructions')
-                    res = parse_instructions(self)
+                    res = parse_instructions(self, channel=channel)
                     if res:
                         logging.debug('Channel success')
                         channel.write(f'{timestamp}:success\n'.encode('utf-8'))
@@ -200,6 +203,38 @@ class Agent:
                 self.signal_watch(attempt + 1, test=test)
             else:
                 logging.error(f'signal_watch :: {err}. Ending thread.')
+
+    def monitor(self, channel, test=False, **kwargs):
+        """
+        Worker target for a monitor thread. Writes any matching updates to the channel.
+
+        Arguments:
+        channel (fd) - Comm channel with worker
+        test [bool] - If True, the monitor loop ends after 1 iteration (used for unit testing)
+        **kwargs (dict) - Required:
+                           - file: full path of the file to monitor
+                           - pattern: regex that should be considered a match for a progress update
+        """
+        filename = kwargs.get('file')
+        if not filename:
+            return
+        pattern = kwargs.get('pattern')
+        logging.info(f'Starting monitor for {filename}')
+        while self.monitoring and not os.path.exists(filename):
+            time.sleep(1)
+        with open(filename, 'r') as monitor_file:
+            while self.monitoring:
+                line = monitor_file.readline()
+                if line:
+                    logging.debug(f'monitor :: {line}')
+                    match = re.match(pattern, line)
+                    if match and match.groups():
+                        logging.debug(f'monitor :: found match {match.groups()[0]}')
+                        channel.write(f'{int(time.time())}:{match.groups()[0]}'.encode('utf-8'))
+                time.sleep(0.5)
+                if test:
+                    break
+            logging.info(f'Stopping monitor for {filename}')
 
 def load_config(config_file):
     """
@@ -231,13 +266,14 @@ def parse_args():
                         default='/etc/cumulus-air/agent.ini')
     return parser.parse_args()
 
-def parse_instructions(agent, attempt=1):
+def parse_instructions(agent, attempt=1, channel=None):
     """
     Parses and executes a set of instructions from the AIR API
 
     Arguments:
     agent (Agent) - An Agent instance
     attempt [int] - The attempt number used for retries
+    channel [fd] - Comm channel to the worker
     """
     results = []
     instructions = False
@@ -247,10 +283,15 @@ def parse_instructions(agent, attempt=1):
             sleep(30)
     for instruction in instructions:
         executor = instruction['executor']
+        if instruction['monitor']:
+            agent.monitoring = True
+            threading.Thread(target=agent.monitor, args=(channel,),
+                             kwargs=json.loads(instruction['monitor'])).start()
         if executor in executors.EXECUTOR_MAP.keys():
             results.append(executors.EXECUTOR_MAP[executor](instruction['data']))
         else:
             logging.warning(f'Received unsupported executor {executor}')
+        agent.monitoring = False
     if len(results) > 0 and all(results):
         logging.debug('All instructions executed successfully')
         agent.delete_instructions()
@@ -261,7 +302,7 @@ def parse_instructions(agent, attempt=1):
         logging.warning(f'Failed to execute all instructions on attempt #{attempt}. ' + \
                         f'Retrying in {backoff} seconds...')
         sleep(backoff)
-        return parse_instructions(agent, attempt + 1)
+        return parse_instructions(agent, attempt + 1, channel)
     if len(results) > 0:
         logging.error('Failed to execute all instructions. Giving up.')
     return False
