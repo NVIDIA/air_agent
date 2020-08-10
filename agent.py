@@ -328,7 +328,7 @@ def parse_instructions(agent, attempt=1, channel=None):
             sleep(30)
     for instruction in instructions:
         executor = instruction['executor']
-        if instruction['monitor']:
+        if instruction.get('monitor'):
             agent.monitoring = True
             threading.Thread(target=agent.monitor, args=(channel,),
                              kwargs=json.loads(instruction['monitor'])).start()
