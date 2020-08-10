@@ -35,7 +35,8 @@ class TestAgentIdentity(TestCase):
         mock_open.assert_called_with(f'{key_dir}uuid_123.txt')
         self.assertEqual(res, 'abc')
 
-    @patch('subprocess.run', side_effect=[subprocess.CalledProcessError(1, 'a'), True, True, True])
+    @patch('subprocess.run', side_effect=[True, True, True, subprocess.CalledProcessError(1, 'a'),
+                                          True])
     @patch('logging.debug')
     @patch('agent.parse_instructions')
     def test_get_identity_failed_umount(self, mock_parse, mock_log, mock_run):
@@ -211,6 +212,65 @@ class TestAgent(TestCase):
         self.agent.monitor(MagicMock())
         mock_open.assert_not_called()
 
+    @patch('subprocess.check_output', return_value=b' 10000 seconds since 1969')
+    @patch('agent.datetime')
+    def test_clock_jumped_past(self, mock_datetime, mock_sub):
+        mock_datetime.now = MagicMock(return_value=datetime(2020, 2, 1))
+        mock_datetime.fromtimestamp = datetime.fromtimestamp
+        res = self.agent.clock_jumped()
+        self.assertTrue(res)
+
+    @patch('subprocess.check_output', return_value=b' 99999999999999 seconds since 1969')
+    @patch('agent.datetime')
+    def test_clock_jumped_future(self, mock_datetime, mock_sub):
+        mock_datetime.now = MagicMock(return_value=datetime(2020, 4, 1))
+        mock_datetime.fromtimestamp = datetime.fromtimestamp
+        res = self.agent.clock_jumped()
+        self.assertTrue(res)
+
+    @patch('subprocess.check_output', return_value=b' 1583038800 seconds since 1969')
+    @patch('agent.datetime')
+    def test_clock_jumped_no_jump(self, mock_datetime, mock_sub):
+        mock_datetime.now = MagicMock(return_value=datetime.fromtimestamp(1583038800))
+        mock_datetime.fromtimestamp = datetime.fromtimestamp
+        res = self.agent.clock_jumped()
+        self.assertFalse(res)
+
+    @patch('subprocess.check_output', side_effect=Exception)
+    @patch('agent.datetime')
+    @patch('logging.warning')
+    def test_clock_jumped_exception(self, mock_log, mock_datetime, mock_sub):
+        mock_datetime.now = MagicMock(return_value=datetime(2020, 3, 1))
+        mock_datetime.fromtimestamp = datetime.fromtimestamp
+        res = self.agent.clock_jumped()
+        self.assertTrue(res)
+        mock_log.assert_called_with('Something went wrong. Syncing clock to be safe...')
+
+    @patch('subprocess.check_output', return_value=b'foo')
+    @patch('builtins.Exception')
+    def test_clock_jumped_raised(self, mock_exception, mock_sub):
+        self.agent.clock_jumped()
+        mock_exception.assert_called_with('Unable to parse hardware clock')
+
+    @patch('subprocess.check_output', return_value=b'hwclock from util-linux 2.34.2')
+    def test_set_hwclock_switch_new(self, mock_output):
+        self.agent.set_hwclock_switch()
+        self.assertEqual(self.agent.hwclock_switch, '--verbose')
+
+    @patch('subprocess.check_output', return_value=b'hwclock from util-linux 2.31.1')
+    @patch('logging.info')
+    def test_set_hwclock_switch_old(self, mock_log, mock_output):
+        self.agent.set_hwclock_switch()
+        self.assertEqual(self.agent.hwclock_switch, '--debug')
+        mock_log.assert_not_called()
+
+    @patch('subprocess.check_output', return_value=b'foo')
+    @patch('logging.info')
+    def test_set_hwclock_switch_fallback(self, mock_log, mock_output):
+        self.agent.set_hwclock_switch()
+        self.assertEqual(self.agent.hwclock_switch, '--debug')
+        mock_log.assert_called_with('Failed to detect hwclock switch, falling back to --debug')
+
 class TestAgentFunctions(TestCase):
     class MockConfigParser(dict):
         def __init__(self):
@@ -266,7 +326,7 @@ class TestAgentFunctions(TestCase):
         agent_obj = Agent(MOCK_CONFIG)
         agent_obj.check_identity = MagicMock(return_value=False)
         agent_obj.delete_instructions = MagicMock()
-        agent.clock_jumped = MagicMock(return_value=True)
+        agent_obj.clock_jumped = MagicMock(return_value=True)
         agent.fix_clock = MagicMock()
         agent.start_daemon(agent_obj, test=True)
         mock_exec.EXECUTOR_MAP['shell'].assert_called_with('foo')
@@ -424,46 +484,6 @@ class TestAgentFunctions(TestCase):
         mock_for_assert('systemctl restart chrony.service', shell=True)
         agent.restart_ntp()
         self.assertEqual(mock_call.mock_calls, mock_for_assert.mock_calls)
-
-    @patch('subprocess.check_output', return_value=b' 10000 seconds since 1969')
-    @patch('agent.datetime')
-    def test_clock_jumped_past(self, mock_datetime, mock_sub):
-        mock_datetime.now = MagicMock(return_value=datetime(2020, 2, 1))
-        mock_datetime.fromtimestamp = datetime.fromtimestamp
-        res = agent.clock_jumped()
-        self.assertTrue(res)
-
-    @patch('subprocess.check_output', return_value=b' 99999999999999 seconds since 1969')
-    @patch('agent.datetime')
-    def test_clock_jumped_future(self, mock_datetime, mock_sub):
-        mock_datetime.now = MagicMock(return_value=datetime(2020, 4, 1))
-        mock_datetime.fromtimestamp = datetime.fromtimestamp
-        res = agent.clock_jumped()
-        self.assertTrue(res)
-
-    @patch('subprocess.check_output', return_value=b' 1583038800 seconds since 1969')
-    @patch('agent.datetime')
-    def test_clock_jumped_no_jump(self, mock_datetime, mock_sub):
-        mock_datetime.now = MagicMock(return_value=datetime.fromtimestamp(1583038800))
-        mock_datetime.fromtimestamp = datetime.fromtimestamp
-        res = agent.clock_jumped()
-        self.assertFalse(res)
-
-    @patch('subprocess.check_output', side_effect=Exception)
-    @patch('agent.datetime')
-    @patch('logging.warning')
-    def test_clock_jumped_exception(self, mock_log, mock_datetime, mock_sub):
-        mock_datetime.now = MagicMock(return_value=datetime(2020, 3, 1))
-        mock_datetime.fromtimestamp = datetime.fromtimestamp
-        res = agent.clock_jumped()
-        self.assertTrue(res)
-        mock_log.assert_called_with('Something went wrong. Syncing clock to be safe...')
-
-    @patch('subprocess.check_output', return_value=b'foo')
-    @patch('builtins.Exception')
-    def test_clock_jumped_raised(self, mock_exception, mock_sub):
-        agent.clock_jumped()
-        mock_exception.assert_called_with('Unable to parse hardware clock')
 
     @patch('subprocess.run')
     @patch('agent.restart_ntp')

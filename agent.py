@@ -33,8 +33,32 @@ class Agent:
         self.config = config
         self.identity = self.get_identity()
         self.monitoring = False
+        self.hwclock_switch = None
+        self.set_hwclock_switch()
         logging.info(f'Initializing with identity {self.identity}')
         parse_instructions(self)
+
+    def set_hwclock_switch(self):
+        """
+        Detects util-linux's hwclock version. Versions >= 2.32 should use --verbose
+        when reading the hardware clock. Older versions should use --debug.
+
+        Returns:
+        str - The appropriate switch to use. Defaults to --debug.
+        """
+        try:
+            output = subprocess.check_output('hwclock --version', shell=True)
+            match = re.match(r'.*(\d+\.\d+\.\d+)', output.decode('utf-8'))
+            version = match.groups()[0]
+            if version >= '2.32':
+                logging.debug('Detected hwclock switch: --verbose')
+                self.hwclock_switch = '--verbose'
+                return
+        except Exception:
+            logging.debug(traceback.format_exc())
+            logging.info('Failed to detect hwclock switch, falling back to --debug')
+        logging.debug('Detected hwclock switch: --debug')
+        self.hwclock_switch = '--debug'
 
     def get_identity(self):
         """
@@ -236,6 +260,27 @@ class Agent:
                     break
             logging.info(f'Stopping monitor for {filename}')
 
+    def clock_jumped(self):
+        """
+        Returns True if the system's time has drifted by +/- 30 seconds from the hardware clock
+        """
+        system_time = datetime.now()
+        try:
+            cmd = f'hwclock {self.hwclock_switch} | grep "Hw clock"'
+            hwclock_output = subprocess.check_output(cmd, shell=True)
+            match = re.match(r'.* (\d+) seconds since 1969', hwclock_output.decode('utf-8'))
+            if match:
+                hw_time = datetime.fromtimestamp(int(match.groups()[0]))
+            else:
+                raise Exception('Unable to parse hardware clock')
+        except:
+            logging.debug(traceback.format_exc())
+            hw_time = datetime.fromtimestamp(0)
+            logging.warning('Something went wrong. Syncing clock to be safe...')
+        delta = system_time - hw_time
+        logging.debug(f'System time: {system_time}, Hardware time: {hw_time}, Delta: {delta}')
+        return (delta > timedelta(seconds=30)) or (-delta > timedelta(seconds=30))
+
 def load_config(config_file):
     """
     Helper function to load the agent's config file
@@ -320,26 +365,6 @@ def restart_ntp():
             logging.info(f'Restarting {service}')
             subprocess.call(f'systemctl restart {service}', shell=True)
 
-def clock_jumped():
-    """
-    Returns True if the system's time has drifted by +/- 30 seconds from the hardware clock
-    """
-    system_time = datetime.now()
-    try:
-        hwclock_output = subprocess.check_output('hwclock -D | grep "Hw clock"', shell=True)
-        match = re.match(r'.* (\d+) seconds since 1969', hwclock_output.decode('utf-8'))
-        if match:
-            hw_time = datetime.fromtimestamp(int(match.groups()[0]))
-        else:
-            raise Exception('Unable to parse hardware clock')
-    except:
-        logging.debug(traceback.format_exc())
-        hw_time = datetime.fromtimestamp(0)
-        logging.warning('Something went wrong. Syncing clock to be safe...')
-    delta = system_time - hw_time
-    logging.debug(f'System time: {system_time}, Hardware time: {hw_time}, Delta: {delta}')
-    return (delta > timedelta(seconds=30)) or (-delta > timedelta(seconds=30))
-
 def fix_clock():
     """
     Fixes the system's time by 1) syncing the clock from the hypervisor, and
@@ -364,7 +389,7 @@ def start_daemon(agent, test=False):
     """
     threading.Thread(target=agent.signal_watch).start()
     while True:
-        if clock_jumped():
+        if agent.clock_jumped():
             fix_clock()
         same_id = agent.check_identity()
         if not same_id:
