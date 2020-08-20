@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -21,9 +22,11 @@ from pathlib import Path
 from time import sleep
 
 from cryptography.fernet import Fernet
+import git
 import requests
 
 import executors
+from version import AGENT_VERSION
 
 class Agent:
     """
@@ -35,6 +38,7 @@ class Agent:
         self.monitoring = False
         self.hwclock_switch = None
         self.set_hwclock_switch()
+        self.auto_update()
         logging.info(f'Initializing with identity {self.identity}')
         parse_instructions(self)
 
@@ -281,6 +285,44 @@ class Agent:
         logging.debug(f'System time: {system_time}, Hardware time: {hw_time}, Delta: {delta}')
         return (delta > timedelta(seconds=30)) or (-delta > timedelta(seconds=30))
 
+    def auto_update(self):
+        """ Checks for and applies new agent updates if available """
+        if not self.config['AUTO_UPDATE']:
+            logging.debug('Auto update is disabled')
+            return
+        logging.info('Checking for updates')
+        try:
+            res = requests.get(self.config['VERSION_URL'])
+            #pylint: disable=invalid-string-quote
+            latest = res.text.split(' = ')[1].strip().strip("'")
+            if AGENT_VERSION != latest:
+                logging.debug('New version is available')
+            else:
+                logging.debug('Already running the latest version')
+                return
+        except Exception as err:
+            logging.debug(traceback.format_exc())
+            logging.error(f'Failed to check for updates: {err}')
+            return
+        logging.info('Updating agent')
+        try:
+            shutil.rmtree('/tmp/air-agent')
+        except Exception:
+            pass
+        try:
+            git.Repo.clone_from(self.config['GIT_URL'], '/tmp/air-agent',
+                                branch=self.config['GIT_BRANCH'])
+            cwd = os.getcwd()
+            for filename in os.listdir('/tmp/air-agent'):
+                if '.py' in filename:
+                    shutil.move(f'/tmp/air-agent/{filename}', f'{cwd}/{filename}')
+        except Exception as err:
+            logging.debug(traceback.format_exc())
+            logging.error(f'Failed to update agent: {err}')
+            return
+        logging.info('Restarting agent')
+        os.execv(sys.executable, ['python3'] + sys.argv)
+
 def load_config(config_file):
     """
     Helper function to load the agent's config file
@@ -394,6 +436,7 @@ def start_daemon(agent, test=False):
         same_id = agent.check_identity()
         if not same_id:
             logging.info('Identity has changed!')
+            agent.auto_update()
             parse_instructions(agent)
 
         sleep(int(agent.config['CHECK_INTERVAL']))
@@ -409,4 +452,5 @@ if __name__ == '__main__':
     logging.getLogger().setLevel(LOG_LEVEL)
     AGENT = Agent(CONFIG)
 
+    logging.info(f'Starting AIR Agent daemon v{AGENT_VERSION}')
     start_daemon(AGENT)

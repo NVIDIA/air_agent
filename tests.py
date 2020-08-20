@@ -2,10 +2,12 @@
 Unit tests for Agent module
 """
 #pylint: disable=unused-argument,missing-class-docstring,missing-function-docstring
-#pylint: disable=arguments-differ,no-self-use,too-many-public-methods
+#pylint: disable=arguments-differ,no-self-use,too-many-public-methods,too-many-arguments
 
 import json
 import subprocess
+import sys
+from copy import deepcopy
 from datetime import datetime
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
@@ -17,7 +19,9 @@ import executors
 from agent import Agent
 
 MOCK_INI = {'AGENT': {'CHECK_INTERVAL': 60, 'AIR_API': 'http://localhost:8000', 'KEY_DIR': './',
-                      'LOG_LEVEL': 'DEBUG', 'CHANNEL_PATH': '/dev/virtio-ports/air'}}
+                      'LOG_LEVEL': 'DEBUG', 'CHANNEL_PATH': '/dev/virtio-ports/air',
+                      'AUTO_UPDATE': False, 'GIT_URL': 'http://localhost/test.git',
+                      'GIT_BRANCH': 'master', 'VERSION_URL': 'http://localhost/version'}}
 MOCK_CONFIG = MOCK_INI['AGENT']
 
 class TestAgentIdentity(TestCase):
@@ -78,6 +82,12 @@ class TestAgent(TestCase):
         self.mock_id.assert_called()
         self.assertEqual(self.agent.identity, '123-456')
         self.assertFalse(self.agent.monitoring)
+
+    @patch('agent.parse_instructions')
+    @patch('agent.Agent.auto_update')
+    def test_init_update(self, mock_update, mock_parse):
+        Agent(MOCK_CONFIG)
+        mock_update.assert_called()
 
     def test_check_identity(self):
         res = self.agent.check_identity()
@@ -271,6 +281,106 @@ class TestAgent(TestCase):
         self.assertEqual(self.agent.hwclock_switch, '--debug')
         mock_log.assert_called_with('Failed to detect hwclock switch, falling back to --debug')
 
+    @patch('requests.get')
+    @patch('logging.debug')
+    def test_auto_update_disabled(self, mock_log, mock_get):
+        self.agent.auto_update()
+        mock_get.assert_not_called()
+        mock_log.assert_called_with('Auto update is disabled')
+
+    @patch('requests.get')
+    @patch('agent.AGENT_VERSION', '1.4.3')
+    @patch('shutil.rmtree')
+    @patch('git.Repo.clone_from')
+    @patch('os.getcwd', return_value='/tmp/foo')
+    @patch('os.listdir', return_value=['test.txt', 'test.py'])
+    @patch('shutil.move')
+    @patch('os.execv')
+    @patch('agent.parse_instructions')
+    def test_auto_update(self, mock_parse, mock_exec, mock_move, mock_ls, mock_cwd, mock_clone,
+                         mock_rm, mock_get):
+        mock_get.return_value.text = 'AGENT_VERSION = \'2.0.0\'\n'
+        config = deepcopy(MOCK_CONFIG)
+        testagent = Agent(config)
+        testagent.config['AUTO_UPDATE'] = True
+        testagent.auto_update()
+        mock_get.assert_called_with(MOCK_CONFIG['VERSION_URL'])
+        mock_rm.assert_called_with('/tmp/air-agent')
+        mock_clone.assert_called_with(MOCK_CONFIG['GIT_URL'], '/tmp/air-agent',
+                                      branch=MOCK_CONFIG['GIT_BRANCH'])
+        mock_move.assert_called_with('/tmp/air-agent/test.py', '/tmp/foo/test.py')
+        mock_exec.assert_called_with(sys.executable, ['python3'] + sys.argv)
+
+    @patch('requests.get')
+    @patch('agent.AGENT_VERSION', '1.4.3')
+    @patch('git.Repo.clone_from')
+    @patch('agent.parse_instructions')
+    @patch('logging.debug')
+    def test_auto_update_latest(self, mock_log, mock_parse, mock_clone, mock_get):
+        mock_get.return_value.text = 'AGENT_VERSION = \'1.4.3\'\n'
+        config = deepcopy(MOCK_CONFIG)
+        testagent = Agent(config)
+        testagent.config['AUTO_UPDATE'] = True
+        testagent.auto_update()
+        mock_clone.assert_not_called()
+        mock_log.assert_called_with('Already running the latest version')
+
+    @patch('requests.get', side_effect=Exception('foo'))
+    @patch('agent.AGENT_VERSION', '1.4.3')
+    @patch('git.Repo.clone_from')
+    @patch('agent.parse_instructions')
+    @patch('logging.error')
+    def test_auto_update_check_fail(self, mock_log, mock_parse, mock_clone, mock_get):
+        config = deepcopy(MOCK_CONFIG)
+        testagent = Agent(config)
+        testagent.config['AUTO_UPDATE'] = True
+        testagent.auto_update()
+        mock_clone.assert_not_called()
+        mock_log.assert_called_with('Failed to check for updates: foo')
+
+    @patch('requests.get')
+    @patch('agent.AGENT_VERSION', '1.4.3')
+    @patch('shutil.rmtree', side_effect=Exception('foo'))
+    @patch('git.Repo.clone_from')
+    @patch('os.getcwd', return_value='/tmp/foo')
+    @patch('os.listdir', return_value=['test.txt', 'test.py'])
+    @patch('shutil.move')
+    @patch('os.execv')
+    @patch('agent.parse_instructions')
+    def test_auto_update_rm_safe(self, mock_parse, mock_exec, mock_move, mock_ls, mock_cwd,
+                                 mock_clone, mock_rm, mock_get):
+        mock_get.return_value.text = 'AGENT_VERSION = \'2.0.0\'\n'
+        config = deepcopy(MOCK_CONFIG)
+        testagent = Agent(config)
+        testagent.config['AUTO_UPDATE'] = True
+        testagent.auto_update()
+        mock_get.assert_called_with(MOCK_CONFIG['VERSION_URL'])
+        mock_rm.assert_called_with('/tmp/air-agent')
+        mock_clone.assert_called_with(MOCK_CONFIG['GIT_URL'], '/tmp/air-agent',
+                                      branch=MOCK_CONFIG['GIT_BRANCH'])
+        mock_move.assert_called_with('/tmp/air-agent/test.py', '/tmp/foo/test.py')
+        mock_exec.assert_called_with(sys.executable, ['python3'] + sys.argv)
+
+    @patch('requests.get')
+    @patch('agent.AGENT_VERSION', '1.4.3')
+    @patch('shutil.rmtree')
+    @patch('git.Repo.clone_from', side_effect=Exception('foo'))
+    @patch('os.getcwd', return_value='/tmp/foo')
+    @patch('os.listdir', return_value=['test.txt', 'test.py'])
+    @patch('shutil.move')
+    @patch('os.execv')
+    @patch('agent.parse_instructions')
+    @patch('logging.error')
+    def test_auto_update_error(self, mock_log, mock_parse, mock_exec, mock_move, mock_ls, mock_cwd,
+                               mock_clone, mock_rm, mock_get):
+        mock_get.return_value.text = 'AGENT_VERSION = \'2.0.0\'\n'
+        config = deepcopy(MOCK_CONFIG)
+        testagent = Agent(config)
+        testagent.config['AUTO_UPDATE'] = True
+        testagent.auto_update()
+        mock_exec.assert_not_called()
+        mock_log.assert_called_with('Failed to update agent: foo')
+
 class TestAgentFunctions(TestCase):
     class MockConfigParser(dict):
         def __init__(self):
@@ -318,7 +428,8 @@ class TestAgentFunctions(TestCase):
     @patch('agent.Agent.get_instructions', return_value=[{'data': 'foo', 'executor': 'shell',
                                                           'monitor': None}])
     @patch('threading.Thread')
-    def test_start_daemon(self, mock_threading, mock_parse, mock_sleep, mock_exec):
+    @patch('agent.Agent.auto_update')
+    def test_start_daemon(self, mock_update, mock_threading, mock_parse, mock_sleep, mock_exec):
         mock_thread = MagicMock()
         mock_threading.return_value = mock_thread
         mock_exec.EXECUTOR_MAP = {'shell': MagicMock()}
@@ -335,6 +446,7 @@ class TestAgentFunctions(TestCase):
         agent.fix_clock.assert_called()
         mock_threading.assert_called_with(target=agent_obj.signal_watch)
         mock_thread.start.assert_called()
+        mock_update.assert_called()
 
     @patch('agent.executors')
     @patch('agent.sleep')
