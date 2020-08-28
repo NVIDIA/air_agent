@@ -586,6 +586,15 @@ class TestAgentFunctions(TestCase):
                                              kwargs=json.loads(monitor_str))
         mock_thread.start.assert_called()
 
+    def test_parse_instructions_none(self):
+        mock_agent = MagicMock()
+        mock_agent.identity = 'abc'
+        mock_agent.get_instructions = MagicMock(return_value=[])
+        mock_agent.get_identity = MagicMock(return_value='foo')
+        res = agent.parse_instructions(mock_agent)
+        self.assertTrue(res)
+        self.assertEqual(mock_agent.identity, 'foo')
+
     @patch('subprocess.check_output',
            return_value=b'ntp.service\nfoo.service\nntp@mgmt.service\nchrony.service')
     @patch('subprocess.call')

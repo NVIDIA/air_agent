@@ -366,6 +366,10 @@ def parse_instructions(agent, attempt=1, channel=None):
     instructions = False
     while instructions is False:
         instructions = agent.get_instructions()
+        if instructions == []:
+            logging.info('Received no instructions')
+            agent.identity = agent.get_identity()
+            return True
         if instructions is False:
             sleep(30)
     for instruction in instructions:
