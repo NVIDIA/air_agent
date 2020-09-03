@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 Clock is not synced when auto-update is applied
 Agent stuck in instruction fetch loop
+Always sync clock when identity changes
 
 ## [2.0.1] - 2020-08-28
 ### Fixed

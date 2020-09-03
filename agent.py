@@ -441,13 +441,14 @@ def start_daemon(agent, test=False):
     """
     threading.Thread(target=agent.signal_watch).start()
     while True:
-        if agent.clock_jumped():
-            fix_clock()
         same_id = agent.check_identity()
         if not same_id:
             logging.info('Identity has changed!')
+            fix_clock()
             agent.auto_update()
             parse_instructions(agent)
+        if agent.clock_jumped():
+            fix_clock()
 
         sleep(int(agent.config['CHECK_INTERVAL']))
         if test:
