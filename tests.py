@@ -29,7 +29,8 @@ class TestAgentIdentity(TestCase):
     @patch('glob.glob', return_value=['./uuid_123.txt'])
     @patch('builtins.open')
     @patch('agent.parse_instructions')
-    def test_get_identity(self, mock_parse, mock_open, mock_glob, mock_run):
+    @patch('agent.Agent.clock_jumped', return_value=False)
+    def test_get_identity(self, mock_jump, mock_parse, mock_open, mock_glob, mock_run):
         mock_file = MagicMock()
         mock_file.read = MagicMock(return_value='ABC\n')
         mock_open.return_value.__enter__.return_value = mock_file
@@ -43,7 +44,8 @@ class TestAgentIdentity(TestCase):
                                           True])
     @patch('logging.debug')
     @patch('agent.parse_instructions')
-    def test_get_identity_failed_umount(self, mock_parse, mock_log, mock_run):
+    @patch('agent.Agent.clock_jumped', return_value=False)
+    def test_get_identity_failed_umount(self, mock_jump, mock_parse, mock_log, mock_run):
         agent_obj = Agent(MOCK_CONFIG)
         res = agent_obj.get_identity()
         self.assertIsNone(res)
@@ -53,7 +55,8 @@ class TestAgentIdentity(TestCase):
     @patch('subprocess.run', side_effect=[True, True, True, subprocess.CalledProcessError(1, 'a')])
     @patch('logging.error')
     @patch('agent.parse_instructions')
-    def test_get_identity_failed_mount(self, mock_parse, mock_log, mock_run):
+    @patch('agent.Agent.clock_jumped', return_value=False)
+    def test_get_identity_failed_mount(self, mock_jump, mock_parse, mock_log, mock_run):
         agent_obj = Agent(MOCK_CONFIG)
         res = agent_obj.get_identity()
         self.assertIsNone(res)
@@ -64,7 +67,8 @@ class TestAgentIdentity(TestCase):
     @patch('glob.glob', return_value=[])
     @patch('logging.error')
     @patch('agent.parse_instructions')
-    def test_get_identity_no_file(self, mock_parse, mock_log, mock_glob, mock_run):
+    @patch('agent.Agent.clock_jumped', return_value=False)
+    def test_get_identity_no_file(self, mock_jump, mock_parse, mock_log, mock_glob, mock_run):
         agent_obj = Agent(MOCK_CONFIG)
         res = agent_obj.get_identity()
         self.assertIsNone(res)
@@ -72,7 +76,8 @@ class TestAgentIdentity(TestCase):
 
 class TestAgent(TestCase):
     @patch('agent.parse_instructions')
-    def setUp(self, mock_parse):
+    @patch('agent.Agent.clock_jumped', return_value=False)
+    def setUp(self, mock_jump, mock_parse):
         self.mock_id = MagicMock(return_value='123-456')
         Agent.get_identity = self.mock_id
         self.agent = Agent(MOCK_CONFIG)
@@ -85,9 +90,18 @@ class TestAgent(TestCase):
 
     @patch('agent.parse_instructions')
     @patch('agent.Agent.auto_update')
-    def test_init_update(self, mock_update, mock_parse):
+    @patch('agent.Agent.clock_jumped', return_value=False)
+    def test_init_update(self, mock_jump, mock_update, mock_parse):
         Agent(MOCK_CONFIG)
         mock_update.assert_called()
+
+    @patch('agent.parse_instructions')
+    @patch('agent.Agent.auto_update')
+    @patch('agent.Agent.clock_jumped', return_value=True)
+    @patch('agent.fix_clock')
+    def test_init_fix_clock(self, mock_fix, mock_jump, mock_update, mock_parse):
+        Agent(MOCK_CONFIG)
+        mock_fix.assert_called()
 
     def test_check_identity(self):
         res = self.agent.check_identity()
@@ -297,8 +311,9 @@ class TestAgent(TestCase):
     @patch('shutil.move')
     @patch('os.execv')
     @patch('agent.parse_instructions')
-    def test_auto_update(self, mock_parse, mock_exec, mock_move, mock_ls, mock_cwd, mock_clone,
-                         mock_rm, mock_get):
+    @patch('agent.Agent.clock_jumped', return_value=False)
+    def test_auto_update(self, mock_jump, mock_parse, mock_exec, mock_move, mock_ls, mock_cwd,
+                         mock_clone, mock_rm, mock_get):
         mock_get.return_value.text = 'AGENT_VERSION = \'2.0.0\'\n'
         config = deepcopy(MOCK_CONFIG)
         testagent = Agent(config)
@@ -316,7 +331,8 @@ class TestAgent(TestCase):
     @patch('git.Repo.clone_from')
     @patch('agent.parse_instructions')
     @patch('logging.debug')
-    def test_auto_update_latest(self, mock_log, mock_parse, mock_clone, mock_get):
+    @patch('agent.Agent.clock_jumped', return_value=False)
+    def test_auto_update_latest(self, mock_jump, mock_log, mock_parse, mock_clone, mock_get):
         mock_get.return_value.text = 'AGENT_VERSION = \'1.4.3\'\n'
         config = deepcopy(MOCK_CONFIG)
         testagent = Agent(config)
@@ -330,7 +346,8 @@ class TestAgent(TestCase):
     @patch('git.Repo.clone_from')
     @patch('agent.parse_instructions')
     @patch('logging.error')
-    def test_auto_update_check_fail(self, mock_log, mock_parse, mock_clone, mock_get):
+    @patch('agent.Agent.clock_jumped', return_value=False)
+    def test_auto_update_check_fail(self, mock_jump, mock_log, mock_parse, mock_clone, mock_get):
         config = deepcopy(MOCK_CONFIG)
         testagent = Agent(config)
         testagent.config['AUTO_UPDATE'] = True
@@ -347,8 +364,9 @@ class TestAgent(TestCase):
     @patch('shutil.move')
     @patch('os.execv')
     @patch('agent.parse_instructions')
-    def test_auto_update_rm_safe(self, mock_parse, mock_exec, mock_move, mock_ls, mock_cwd,
-                                 mock_clone, mock_rm, mock_get):
+    @patch('agent.Agent.clock_jumped', return_value=False)
+    def test_auto_update_rm_safe(self, mock_jump, mock_parse, mock_exec, mock_move, mock_ls,
+                                 mock_cwd, mock_clone, mock_rm, mock_get):
         mock_get.return_value.text = 'AGENT_VERSION = \'2.0.0\'\n'
         config = deepcopy(MOCK_CONFIG)
         testagent = Agent(config)
@@ -371,8 +389,9 @@ class TestAgent(TestCase):
     @patch('os.execv')
     @patch('agent.parse_instructions')
     @patch('logging.error')
-    def test_auto_update_error(self, mock_log, mock_parse, mock_exec, mock_move, mock_ls, mock_cwd,
-                               mock_clone, mock_rm, mock_get):
+    @patch('agent.Agent.clock_jumped', return_value=False)
+    def test_auto_update_error(self, mock_jump, mock_log, mock_parse, mock_exec, mock_move, mock_ls,
+                               mock_cwd, mock_clone, mock_rm, mock_get):
         mock_get.return_value.text = 'AGENT_VERSION = \'2.0.0\'\n'
         config = deepcopy(MOCK_CONFIG)
         testagent = Agent(config)
@@ -429,7 +448,9 @@ class TestAgentFunctions(TestCase):
                                                           'monitor': None}])
     @patch('threading.Thread')
     @patch('agent.Agent.auto_update')
-    def test_start_daemon(self, mock_update, mock_threading, mock_parse, mock_sleep, mock_exec):
+    @patch('agent.Agent.clock_jumped', return_value=False)
+    def test_start_daemon(self, mock_jump, mock_update, mock_threading, mock_parse, mock_sleep,
+                          mock_exec):
         mock_thread = MagicMock()
         mock_threading.return_value = mock_thread
         mock_exec.EXECUTOR_MAP = {'shell': MagicMock()}
@@ -452,7 +473,9 @@ class TestAgentFunctions(TestCase):
     @patch('agent.sleep')
     @patch('agent.parse_instructions')
     @patch('threading.Thread')
-    def test_start_daemon_no_change(self, mock_threading, mock_parse, mock_sleep, mock_exec):
+    @patch('agent.Agent.clock_jumped', return_value=False)
+    def test_start_daemon_no_change(self, mock_jump, mock_threading, mock_parse, mock_sleep,
+                                    mock_exec):
         Agent.get_identity = MagicMock(return_value='123-456')
         agent_obj = Agent(MOCK_CONFIG)
         agent_obj.get_instructions = MagicMock()
@@ -464,7 +487,9 @@ class TestAgentFunctions(TestCase):
     @patch('agent.sleep')
     @patch('agent.parse_instructions')
     @patch('threading.Thread')
-    def test_start_daemon_no_jump(self, mock_threading, mock_parse, mock_sleep, mock_exec):
+    @patch('agent.Agent.clock_jumped', return_value=False)
+    def test_start_daemon_no_jump(self, mock_jump, mock_threading, mock_parse, mock_sleep,
+                                  mock_exec):
         mock_exec.EXECUTOR_MAP = {'shell': MagicMock()}
         Agent.get_identity = MagicMock(return_value='123-456')
         agent_obj = Agent(MOCK_CONFIG)
@@ -481,7 +506,9 @@ class TestAgentFunctions(TestCase):
     @patch('agent.Agent.get_instructions', return_value=[{'data': 'foo', 'executor': 'shell',
                                                           'monitor': None}])
     @patch('threading.Thread')
-    def test_start_daemon_command_failed(self, mock_threading, mock_parse, mock_sleep, mock_exec):
+    @patch('agent.Agent.clock_jumped', return_value=False)
+    def test_start_daemon_command_failed(self, mock_jump, mock_threading, mock_parse, mock_sleep,
+                                         mock_exec):
         mock_exec.EXECUTOR_MAP = {'shell': MagicMock(return_value=False)}
         Agent.get_identity = MagicMock(return_value='123-456')
         agent_obj = Agent(MOCK_CONFIG)

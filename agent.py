@@ -38,6 +38,8 @@ class Agent:
         self.monitoring = False
         self.hwclock_switch = None
         self.set_hwclock_switch()
+        if self.clock_jumped():
+            fix_clock()
         self.auto_update()
         logging.info(f'Initializing with identity {self.identity}')
         parse_instructions(self)
