@@ -550,12 +550,22 @@ class TestAgentFunctions(TestCase):
         mock_log.assert_called_with('Received unsupported executor test')
 
     @patch('agent.sleep')
-    def test_parse_instructions_failed(self, mock_sleep):
+    def test_parse_instructions_retry(self, mock_sleep):
         mock_agent = MagicMock()
         mock_agent.get_instructions.side_effect = [False, []]
-        agent.parse_instructions(mock_agent)
+        res = agent.parse_instructions(mock_agent, attempt=3)
         mock_sleep.assert_called_with(30)
         self.assertEqual(mock_agent.get_instructions.call_count, 2)
+        self.assertTrue(res)
+
+    @patch('agent.sleep')
+    def test_parse_instructions_failed(self, mock_sleep):
+        mock_agent = MagicMock()
+        mock_agent.get_instructions.side_effect = [False, False]
+        res = agent.parse_instructions(mock_agent, attempt=3)
+        mock_sleep.assert_called_with(30)
+        self.assertEqual(mock_agent.get_instructions.call_count, 2)
+        self.assertFalse(res)
 
     @patch('agent.executors')
     @patch('logging.warning')

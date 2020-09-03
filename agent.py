@@ -365,15 +365,20 @@ def parse_instructions(agent, attempt=1, channel=None):
     channel [fd] - Comm channel to the worker
     """
     results = []
-    instructions = False
-    while instructions is False:
-        instructions = agent.get_instructions()
-        if instructions == []:
-            logging.info('Received no instructions')
-            agent.identity = agent.get_identity()
-            return True
-        if instructions is False:
-            sleep(30)
+    backoff = attempt * 10
+    instructions = agent.get_instructions()
+    if instructions == []:
+        logging.info('Received no instructions')
+        agent.identity = agent.get_identity()
+        return True
+    if instructions is False and attempt <= 3:
+        logging.warning(f'Failed to fetch instructions on attempt #{attempt}.' + \
+                        f'Retrying in {backoff} seconds...')
+        sleep(backoff)
+        return parse_instructions(agent, attempt + 1, channel)
+    if instructions is False:
+        logging.error('Failed to fetch instructions. Giving up.')
+        return False
     for instruction in instructions:
         executor = instruction['executor']
         if instruction.get('monitor'):
@@ -391,7 +396,6 @@ def parse_instructions(agent, attempt=1, channel=None):
         agent.identity = agent.get_identity()
         return True
     if len(results) > 0 and attempt <= 3:
-        backoff = attempt * 10
         logging.warning(f'Failed to execute all instructions on attempt #{attempt}. ' + \
                         f'Retrying in {backoff} seconds...')
         sleep(backoff)

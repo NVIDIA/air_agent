@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.0.2] - 2020-09-03
 ### Fixed
 Clock is not synced when auto-update is applied
+Agent stuck in instruction fetch loop
 
 ## [2.0.1] - 2020-08-28
 ### Fixed
