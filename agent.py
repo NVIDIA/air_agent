@@ -324,6 +324,20 @@ class Agent:
         logging.info('Restarting agent')
         os.execv(sys.executable, ['python3'] + sys.argv)
 
+    def clock_watch(self, **kwargs):
+        """
+        Watches for clock jumps and updates the clock
+        """
+        logging.debug('Starting clock watch thread')
+        while True:
+            wait = int(self.config['CHECK_INTERVAL'])
+            if self.clock_jumped():
+                fix_clock()
+                wait += 300
+            if kwargs.get('test'):
+                break
+            sleep(wait)
+
 def load_config(config_file):
     """
     Helper function to load the agent's config file
@@ -439,6 +453,7 @@ def start_daemon(agent, test=False):
     [test] (bool) - Used in unit testing to avoid infinite loop
     """
     threading.Thread(target=agent.signal_watch).start()
+    threading.Thread(target=agent.clock_watch).start()
     while True:
         same_id = agent.check_identity()
         if not same_id:
@@ -446,8 +461,6 @@ def start_daemon(agent, test=False):
             fix_clock()
             agent.auto_update()
             parse_instructions(agent)
-        if agent.clock_jumped():
-            fix_clock()
 
         sleep(int(agent.config['CHECK_INTERVAL']))
         if test:
