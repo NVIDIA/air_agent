@@ -399,6 +399,22 @@ class TestAgent(TestCase):
         mock_exec.assert_not_called()
         mock_log.assert_called_with('Failed to update agent: foo')
 
+    @patch('agent.Agent.clock_jumped', return_value=True)
+    @patch('agent.fix_clock')
+    @patch('agent.sleep')
+    def test_clock_watch(self, mock_sleep, mock_fix, mock_jump):
+        self.agent.clock_watch(test=True)
+        mock_fix.assert_called()
+        mock_sleep.assert_called_with(self.agent.config['CHECK_INTERVAL'] + 300)
+
+    @patch('agent.Agent.clock_jumped', return_value=False)
+    @patch('agent.fix_clock')
+    @patch('agent.sleep')
+    def test_clock_watch_no_jump(self, mock_sleep, mock_fix, mock_jump):
+        self.agent.clock_watch(test=True)
+        mock_fix.assert_not_called()
+        mock_sleep.assert_called_with(self.agent.config['CHECK_INTERVAL'])
+
 class TestAgentFunctions(TestCase):
     class MockConfigParser(dict):
         def __init__(self):
@@ -450,22 +466,24 @@ class TestAgentFunctions(TestCase):
     @patch('agent.fix_clock')
     def test_start_daemon(self, mock_fix, mock_update, mock_threading, mock_parse, mock_sleep,
                           mock_exec):
-        mock_thread = MagicMock()
-        mock_threading.return_value = mock_thread
+        mock_signal_thread = MagicMock()
+        mock_clock_thread = MagicMock()
+        mock_threading.side_effect = [mock_signal_thread, mock_clock_thread]
         mock_exec.EXECUTOR_MAP = {'shell': MagicMock()}
         Agent.get_identity = MagicMock(return_value='123-456')
         agent_obj = Agent(MOCK_CONFIG)
         agent_obj.check_identity = MagicMock(return_value=False)
         agent_obj.delete_instructions = MagicMock()
-        agent_obj.clock_jumped = MagicMock(return_value=True)
-        agent.fix_clock = MagicMock()
         agent.start_daemon(agent_obj, test=True)
         mock_exec.EXECUTOR_MAP['shell'].assert_called_with('foo')
         agent_obj.delete_instructions.assert_called()
         mock_sleep.assert_called_with(MOCK_CONFIG['CHECK_INTERVAL'])
-        agent.fix_clock.assert_called()
-        mock_threading.assert_called_with(target=agent_obj.signal_watch)
-        mock_thread.start.assert_called()
+        mock_for_assert = MagicMock()
+        mock_for_assert(target=agent_obj.signal_watch)
+        mock_for_assert(target=agent_obj.clock_watch)
+        self.assertEqual(mock_threading.mock_calls, mock_for_assert.mock_calls)
+        mock_signal_thread.start.assert_called()
+        mock_clock_thread.start.assert_called()
         mock_update.assert_called()
 
     @patch('agent.executors')
@@ -481,24 +499,6 @@ class TestAgentFunctions(TestCase):
         agent_obj.check_identity = MagicMock(return_value=True)
         agent.start_daemon(agent_obj, test=True)
         agent_obj.get_instructions.assert_not_called()
-
-    @patch('agent.executors')
-    @patch('agent.sleep')
-    @patch('agent.parse_instructions')
-    @patch('threading.Thread')
-    @patch('agent.fix_clock')
-    def test_start_daemon_no_jump(self, mock_fix, mock_threading, mock_parse, mock_sleep,
-                                  mock_exec):
-        mock_exec.EXECUTOR_MAP = {'shell': MagicMock()}
-        Agent.get_identity = MagicMock(return_value='123-456')
-        agent_obj = Agent(MOCK_CONFIG)
-        agent_obj.check_identity = MagicMock(return_value=False)
-        agent_obj.delete_instructions = MagicMock()
-        agent_obj.get_instructions = MagicMock(return_value=[{'data': 'foo', 'executor': 'shell'}])
-        agent_obj.clock_jumped = MagicMock(return_value=False)
-        agent_obj.fix_clock = MagicMock()
-        agent.start_daemon(agent_obj, test=True)
-        agent_obj.fix_clock.assert_not_called()
 
     @patch('agent.executors')
     @patch('agent.sleep')

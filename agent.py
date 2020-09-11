@@ -334,9 +334,9 @@ class Agent:
             if self.clock_jumped():
                 fix_clock()
                 wait += 300
+            sleep(wait)
             if kwargs.get('test'):
                 break
-            sleep(wait)
 
 def load_config(config_file):
     """
