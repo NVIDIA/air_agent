@@ -41,7 +41,6 @@ class Agent:
         fix_clock()
         self.auto_update()
         logging.info(f'Initializing with identity {self.identity}')
-        parse_instructions(self)
 
     def set_hwclock_switch(self):
         """
@@ -454,6 +453,7 @@ def start_daemon(agent, test=False):
     """
     threading.Thread(target=agent.signal_watch).start()
     threading.Thread(target=agent.clock_watch).start()
+    parse_instructions(agent) # do an initial check for instructions
     while True:
         same_id = agent.check_identity()
         if not same_id:

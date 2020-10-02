@@ -499,6 +499,7 @@ class TestAgentFunctions(TestCase):
         agent_obj.check_identity = MagicMock(return_value=True)
         agent.start_daemon(agent_obj, test=True)
         agent_obj.get_instructions.assert_not_called()
+        mock_parse.assert_called()
 
     @patch('agent.executors')
     @patch('agent.sleep')
