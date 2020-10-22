@@ -473,7 +473,7 @@ if __name__ == '__main__':
     if CONFIG['LOG_LEVEL'].upper() in ('CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG'):
         LOG_LEVEL = CONFIG['LOG_LEVEL'].upper()
     LOG_FILE = CONFIG.get('LOG_FILE', '/var/log/air-agent.log')
-    logging.basicConfig(filename=LOG_FILE, level=LOG_LEVEL)
+    logging.basicConfig(filename=LOG_FILE, level=LOG_LEVEL, format='%(asctime)s %(message)s')
     AGENT = Agent(CONFIG)
 
     logging.info(f'Starting AIR Agent daemon v{AGENT_VERSION}')
