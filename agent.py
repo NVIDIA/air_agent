@@ -162,7 +162,7 @@ class Agent:
         try:
             if not identity:
                 raise Exception('No identity')
-            res = requests.get(url)
+            res = requests.get(url, timeout=10)
             instructions = res.json()
             logging.debug(f'Encrypted instructions: {instructions}')
         except:

@@ -146,6 +146,9 @@ class TestAgent(TestCase):
         self.agent.decrypt_instructions = MagicMock(return_value=instructions)
         res = self.agent.get_instructions()
         self.assertDictEqual(res, instructions)
+        url = MOCK_CONFIG['AIR_API'] + 'simulation-node/000-000/instructions/'
+        mock_get.assert_called_with(url, timeout=10)
+
 
     @patch('requests.get', side_effect=Exception)
     @patch('logging.error')
