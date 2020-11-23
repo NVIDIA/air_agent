@@ -7,6 +7,7 @@ Unit tests for Agent module
 import json
 import subprocess
 import sys
+import threading
 from copy import deepcopy
 from datetime import datetime
 from unittest import TestCase
@@ -87,6 +88,7 @@ class TestAgent(TestCase):
         self.mock_id.assert_called()
         self.assertEqual(self.agent.identity, '123-456')
         self.assertFalse(self.agent.monitoring)
+        self.assertIsInstance(self.agent.lock, type(threading.Lock()))
 
     @patch('agent.parse_instructions')
     @patch('agent.Agent.auto_update')
@@ -418,6 +420,15 @@ class TestAgent(TestCase):
         mock_fix.assert_not_called()
         mock_sleep.assert_called_with(self.agent.config['CHECK_INTERVAL'])
 
+    def test_unlock(self):
+        self.agent.lock.acquire()
+        self.agent.unlock()
+        self.assertFalse(self.agent.lock.locked())
+
+    def test_unlock_pass(self):
+        self.agent.unlock()
+        self.assertFalse(self.agent.lock.locked())
+
 class TestAgentFunctions(TestCase):
     class MockConfigParser(dict):
         def __init__(self):
@@ -482,8 +493,8 @@ class TestAgentFunctions(TestCase):
         agent_obj.delete_instructions.assert_called()
         mock_sleep.assert_called_with(MOCK_CONFIG['CHECK_INTERVAL'])
         mock_for_assert = MagicMock()
-        mock_for_assert(target=agent_obj.signal_watch)
         mock_for_assert(target=agent_obj.clock_watch)
+        mock_for_assert(target=agent_obj.signal_watch)
         self.assertEqual(mock_threading.mock_calls, mock_for_assert.mock_calls)
         mock_signal_thread.start.assert_called()
         mock_clock_thread.start.assert_called()
@@ -541,6 +552,8 @@ class TestAgentFunctions(TestCase):
         mock_for_assert('bar')
         self.assertEqual(mock_exec.EXECUTOR_MAP['shell'].mock_calls, mock_for_assert.mock_calls)
         self.assertEqual(mock_agent.identity, 'abc')
+        mock_agent.lock.acquire.assert_called()
+        mock_agent.unlock.assert_called()
 
     @patch('agent.executors')
     @patch('logging.warning')
@@ -560,6 +573,8 @@ class TestAgentFunctions(TestCase):
         mock_sleep.assert_called_with(30)
         self.assertEqual(mock_agent.get_instructions.call_count, 2)
         self.assertTrue(res)
+        mock_agent.lock.acquire.assert_called()
+        mock_agent.unlock.assert_called()
 
     @patch('agent.sleep')
     def test_parse_instructions_failed(self, mock_sleep):
@@ -569,6 +584,8 @@ class TestAgentFunctions(TestCase):
         mock_sleep.assert_called_with(30)
         self.assertEqual(mock_agent.get_instructions.call_count, 2)
         self.assertFalse(res)
+        mock_agent.lock.acquire.assert_called()
+        mock_agent.unlock.assert_called()
 
     @patch('agent.executors')
     @patch('logging.warning')
@@ -591,6 +608,8 @@ class TestAgentFunctions(TestCase):
         assert_sleep(20)
         self.assertEqual(mock_sleep.mock_calls, assert_sleep.mock_calls)
         mock_agent.get_identity.assert_called()
+        mock_agent.lock.acquire.assert_called()
+        mock_agent.unlock.assert_called()
 
     @patch('agent.executors')
     @patch('logging.error')
@@ -609,6 +628,8 @@ class TestAgentFunctions(TestCase):
         self.assertEqual(mock_sleep.mock_calls, assert_sleep.mock_calls)
         mock_agent.get_identity.assert_not_called()
         mock_log.assert_called_with('Failed to execute all instructions. Giving up.')
+        mock_agent.lock.acquire.assert_called()
+        mock_agent.unlock.assert_called()
 
     @patch('agent.executors')
     @patch('threading.Thread')
@@ -625,6 +646,8 @@ class TestAgentFunctions(TestCase):
         mock_thread_class.assert_called_with(target=mock_agent.monitor, args=(mock_channel,),
                                              kwargs=json.loads(monitor_str))
         mock_thread.start.assert_called()
+        mock_agent.lock.acquire.assert_called()
+        mock_agent.unlock.assert_called()
 
     def test_parse_instructions_none(self):
         mock_agent = MagicMock()
@@ -634,6 +657,8 @@ class TestAgentFunctions(TestCase):
         res = agent.parse_instructions(mock_agent)
         self.assertTrue(res)
         self.assertEqual(mock_agent.identity, 'foo')
+        mock_agent.lock.acquire.assert_called()
+        mock_agent.unlock.assert_called()
 
     @patch('subprocess.check_output',
            return_value=b'ntp.service\nfoo.service\nntp@mgmt.service\nchrony.service')

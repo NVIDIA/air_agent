@@ -35,12 +35,20 @@ class Agent:
     def __init__(self, config):
         self.config = config
         self.identity = self.get_identity()
+        self.lock = threading.Lock()
         self.monitoring = False
         self.hwclock_switch = None
         self.set_hwclock_switch()
         fix_clock()
         self.auto_update()
         logging.info(f'Initializing with identity {self.identity}')
+
+    def unlock(self):
+        """ Unlocks the agent lock if locked """
+        try:
+            self.lock.release()
+        except RuntimeError:
+            pass
 
     def set_hwclock_switch(self):
         """
@@ -367,7 +375,7 @@ def parse_args():
                         default='/etc/cumulus-air/agent.ini')
     return parser.parse_args()
 
-def parse_instructions(agent, attempt=1, channel=None):
+def parse_instructions(agent, attempt=1, channel=None, lock=True):
     """
     Parses and executes a set of instructions from the AIR API
 
@@ -375,21 +383,26 @@ def parse_instructions(agent, attempt=1, channel=None):
     agent (Agent) - An Agent instance
     attempt [int] - The attempt number used for retries
     channel [fd] - Comm channel to the worker
+    lock [bool] - Block the agent instance from performing other operations
     """
+    if lock:
+        agent.lock.acquire()
     results = []
     backoff = attempt * 10
     instructions = agent.get_instructions()
     if instructions == []:
         logging.info('Received no instructions')
         agent.identity = agent.get_identity()
+        agent.unlock()
         return True
     if instructions is False and attempt <= 3:
         logging.warning(f'Failed to fetch instructions on attempt #{attempt}.' + \
                         f'Retrying in {backoff} seconds...')
         sleep(backoff)
-        return parse_instructions(agent, attempt + 1, channel)
+        return parse_instructions(agent, attempt + 1, channel, lock=False)
     if instructions is False:
         logging.error('Failed to fetch instructions. Giving up.')
+        agent.unlock()
         return False
     for instruction in instructions:
         executor = instruction['executor']
@@ -404,16 +417,18 @@ def parse_instructions(agent, attempt=1, channel=None):
         agent.monitoring = False
     if len(results) > 0 and all(results):
         logging.debug('All instructions executed successfully')
-        agent.delete_instructions()
         agent.identity = agent.get_identity()
+        agent.delete_instructions()
+        agent.unlock()
         return True
     if len(results) > 0 and attempt <= 3:
         logging.warning(f'Failed to execute all instructions on attempt #{attempt}. ' + \
                         f'Retrying in {backoff} seconds...')
         sleep(backoff)
-        return parse_instructions(agent, attempt + 1, channel)
+        return parse_instructions(agent, attempt + 1, channel, lock=False)
     if len(results) > 0:
         logging.error('Failed to execute all instructions. Giving up.')
+    agent.unlock()
     return False
 
 def restart_ntp():
@@ -451,9 +466,9 @@ def start_daemon(agent, test=False):
     agent (Agent) - An Agent instance
     [test] (bool) - Used in unit testing to avoid infinite loop
     """
-    threading.Thread(target=agent.signal_watch).start()
     threading.Thread(target=agent.clock_watch).start()
     parse_instructions(agent) # do an initial check for instructions
+    threading.Thread(target=agent.signal_watch).start()
     while True:
         same_id = agent.check_identity()
         if not same_id:
@@ -473,7 +488,8 @@ if __name__ == '__main__':
     if CONFIG['LOG_LEVEL'].upper() in ('CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG'):
         LOG_LEVEL = CONFIG['LOG_LEVEL'].upper()
     LOG_FILE = CONFIG.get('LOG_FILE', '/var/log/air-agent.log')
-    logging.basicConfig(filename=LOG_FILE, level=LOG_LEVEL, format='%(asctime)s %(message)s')
+    logging.basicConfig(filename=LOG_FILE, level=LOG_LEVEL,
+                        format='%(asctime)s %(levelname)s %(message)s')
     AGENT = Agent(CONFIG)
 
     logging.info(f'Starting AIR Agent daemon v{AGENT_VERSION}')
