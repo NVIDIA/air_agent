@@ -712,6 +712,18 @@ class TestExecutors(TestCase):
         outfile.write.assert_called_with('bar')
         mock_run.assert_called_with('cat /tmp/foo.txt', shell=True, check=True)
 
+    @patch('builtins.open')
+    @patch('subprocess.run')
+    def test_file_cmd_string(self, mock_run, mock_open):
+        outfile = MagicMock()
+        outfile.write = MagicMock()
+        mock_open.return_value.__enter__.return_value = outfile
+        res = executors.file('{"/tmp/foo.txt": "bar", "post_cmd": "cat /tmp/foo.txt"}')
+        self.assertTrue(res)
+        mock_open.assert_called_with('/tmp/foo.txt', 'w')
+        outfile.write.assert_called_with('bar')
+        mock_run.assert_called_with('cat /tmp/foo.txt', shell=True, check=True)
+
     @patch('builtins.open', side_effect=Exception)
     @patch('logging.error')
     @patch('subprocess.run')
