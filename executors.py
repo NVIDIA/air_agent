@@ -47,6 +47,8 @@ def file(instructions):
 
     if 'post_cmd' in json_data.keys():
         post_cmd = json_data.pop('post_cmd')
+        if not isinstance(post_cmd, list):
+            post_cmd = [post_cmd]
     for filename, content in json_data.items():
         logging.info(f'EXEC file :: writing {filename}')
         logging.debug(content)
