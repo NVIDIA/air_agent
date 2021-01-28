@@ -12,7 +12,7 @@ cache:
 lint:
   stage: test
   before_script:
-    - pip install pylint pylint-quotes -r requirements.txt
+    - pip install pylint pylint-quotes git+https://gitlab.com/nwmitchell/pylint-print -r requirements.txt
   script:
     - pylint *.py
 
