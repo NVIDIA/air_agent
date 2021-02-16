@@ -17,7 +17,7 @@ sudo apt update && sudo apt install -y python3 python3-pip
 ```
 echo 'deb http://deb.debian.org/debian/ jessie main' | sudo tee -a /etc/apt/sources.list
 sudo apt update
-sudo apt-get install -y build-essential libssl-dev libffi-dev python3-dev python3-setuptools
+sudo apt-get install -y build-essential libffi-dev python3-dev python3-setuptools
 # As of February 2020, pip3 v20.x.x is having issues installing our dependencies,
 #  so use v19.3.1 for now
 sudo easy_install3 pip==19.3.1
