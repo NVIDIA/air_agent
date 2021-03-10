@@ -91,7 +91,7 @@ class Agent:
             logging.debug(traceback.format_exc())
             return None
         uuid_path = glob.glob(f'{key_dir}uuid*.txt')
-        if bool(len(uuid_path)):
+        if uuid_path:
             uuid_path = uuid_path[0]
             logging.debug(f'Checking for identity at {uuid_path}')
             with open(uuid_path) as uuid_file:
@@ -415,18 +415,18 @@ def parse_instructions(agent, attempt=1, channel=None, lock=True):
         else:
             logging.warning(f'Received unsupported executor {executor}')
         agent.monitoring = False
-    if len(results) > 0 and all(results):
+    if results and all(results):
         logging.debug('All instructions executed successfully')
         agent.identity = agent.get_identity()
         agent.delete_instructions()
         agent.unlock()
         return True
-    if len(results) > 0 and attempt <= 3:
+    if results and attempt <= 3:
         logging.warning(f'Failed to execute all instructions on attempt #{attempt}. ' + \
                         f'Retrying in {backoff} seconds...')
         sleep(backoff)
         return parse_instructions(agent, attempt + 1, channel, lock=False)
-    if len(results) > 0:
+    if results:
         logging.error('Failed to execute all instructions. Giving up.')
     agent.unlock()
     return False
