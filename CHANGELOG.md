@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [2.0.8] - 2021-04-28
 ### Fixed
 - Monitored task updates are too slow
+- Task monitor doesn't always send \n
 
 ## [2.0.7] - 2021-01-26
 ### Added

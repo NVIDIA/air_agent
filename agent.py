@@ -266,7 +266,7 @@ class Agent:
                     match = re.match(pattern, line)
                     if match and match.groups():
                         logging.debug(f'monitor :: found match {match.groups()[0]}')
-                        channel.write(f'{int(time.time())}:{match.groups()[0]}'.encode('utf-8'))
+                        channel.write(f'{int(time.time())}:{match.groups()[0]}\n'.encode('utf-8'))
                         time.sleep(0.5)
                 if test:
                     break
