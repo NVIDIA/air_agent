@@ -233,7 +233,23 @@ class TestAgent(TestCase):
         mock_channel = MagicMock()
         self.agent.monitoring = True
         self.agent.monitor(mock_channel, file='/tmp/foo', pattern=r'(bar)', test=True)
-        mock_channel.write.assert_called_with('123456:bar'.encode('utf-8'))
+        mock_channel.write.assert_called_with('123456:bar\n'.encode('utf-8'))
+        mock_sleep.assert_called_with(0.5)
+        self.assertEqual(mock_sleep.call_count, 2)
+
+    @patch('builtins.open')
+    @patch('time.time', return_value=123456.90)
+    @patch('os.path.exists', side_effect=[False, True])
+    @patch('time.sleep')
+    def test_monitor_no_match(self, mock_sleep, mock_exists, mock_time, mock_open):
+        mock_file = MagicMock()
+        mock_file.readline.return_value = 'foo\n'
+        mock_open.return_value.__enter__.return_value = mock_file
+        mock_channel = MagicMock()
+        self.agent.monitoring = True
+        self.agent.monitor(mock_channel, file='/tmp/foo', pattern=r'(bar)', test=True)
+        mock_channel.write.assert_not_called()
+        self.assertEqual(mock_sleep.call_count, 1)
 
     @patch('builtins.open')
     def test_monitor_no_file(self, mock_open):
