@@ -34,6 +34,7 @@ class Agent:
     """
     def __init__(self, config):
         self.config = config
+        self.config['AIR_API'] = self.config['AIR_API'].replace('cumulusnetworks.com', 'nvidia.com')
         self.identity = self.get_identity()
         self.lock = threading.Lock()
         self.monitoring = False
