@@ -26,6 +26,8 @@ lint:
     - pip install pylint==2.4.4 pylint-quotes git+https://gitlab.com/nwmitchell/pylint-print -r requirements.txt
   script:
     - pylint *.py
+  except:
+    - tags
 
 unit:
   stage: test
@@ -36,6 +38,8 @@ unit:
   after_script:
     - coverage report
     - coverage html
+  except:
+    - tags
   artifacts:
     paths:
       - htmlcov/
@@ -52,3 +56,5 @@ pages:
       - public
   only:
     - master
+  except:
+    - tags
