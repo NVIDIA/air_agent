@@ -110,8 +110,8 @@ class TestAgent(TestCase):
     def test_init_redirect(self, _mock_fix, _mock_update, _mock_parse):
         config = deepcopy(MOCK_CONFIG)
         config['AIR_API'] = 'http://air.cumulusnetworks.com'
-        agent = Agent(config)
-        self.assertEqual(agent.config['AIR_API'], 'http://air.nvidia.com')
+        test_agent = Agent(config)
+        self.assertEqual(test_agent.config['AIR_API'], 'http://air.nvidia.com')
 
     def test_check_identity(self):
         res = self.agent.check_identity()
