@@ -39,6 +39,7 @@ class Agent:
         self.lock = threading.Lock()
         self.monitoring = False
         self.hwclock_switch = None
+        self.verify_ssl = self.config.get('VERIFY_SSL', True)
         self.set_hwclock_switch()
         fix_clock()
         self.auto_update()
@@ -171,7 +172,7 @@ class Agent:
         try:
             if not identity:
                 raise Exception('No identity')
-            res = requests.get(url, timeout=10)
+            res = requests.get(url, timeout=10, verify=self.verify_ssl)
             instructions = res.json()
             logging.debug(f'Encrypted instructions: {instructions}')
         except:
@@ -191,7 +192,7 @@ class Agent:
         url = self.config['AIR_API']
         url += f'simulation-node/{self.identity}/instructions/'
         try:
-            requests.delete(url)
+            requests.delete(url, verify=self.verify_ssl)
         except:
             logging.error('Failed to delete post-clone instructions')
             logging.debug(traceback.format_exc())

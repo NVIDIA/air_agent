@@ -89,6 +89,16 @@ class TestAgent(TestCase):
         self.assertEqual(self.agent.identity, '123-456')
         self.assertFalse(self.agent.monitoring)
         self.assertIsInstance(self.agent.lock, type(threading.Lock()))
+        self.assertTrue(self.agent.verify_ssl)
+
+    @patch('agent.parse_instructions')
+    @patch('agent.Agent.auto_update')
+    @patch('agent.fix_clock')
+    def test_init_no_verify_ssl(self, _mock_parse, _mock_update, _mock_fix):
+        config = deepcopy(MOCK_CONFIG)
+        config['VERIFY_SSL'] = False
+        test_agent = Agent(config)
+        self.assertFalse(test_agent.verify_ssl)
 
     @patch('agent.parse_instructions')
     @patch('agent.Agent.auto_update')
@@ -158,7 +168,7 @@ class TestAgent(TestCase):
         res = self.agent.get_instructions()
         self.assertDictEqual(res, instructions)
         url = MOCK_CONFIG['AIR_API'] + 'simulation-node/000-000/instructions/'
-        mock_get.assert_called_with(url, timeout=10)
+        mock_get.assert_called_with(url, timeout=10, verify=self.agent.verify_ssl)
 
 
     @patch('requests.get', side_effect=Exception)
@@ -182,7 +192,7 @@ class TestAgent(TestCase):
     def test_delete_instructions(self, mock_delete):
         url = MOCK_CONFIG['AIR_API'] + f'simulation-node/{self.agent.identity}/instructions/'
         self.agent.delete_instructions()
-        mock_delete.assert_called_with(url)
+        mock_delete.assert_called_with(url, verify=self.agent.verify_ssl)
 
     @patch('requests.delete', side_effect=Exception)
     @patch('logging.error')
