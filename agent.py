@@ -39,7 +39,7 @@ class Agent:
         self.lock = threading.Lock()
         self.monitoring = False
         self.hwclock_switch = None
-        self.verify_ssl = self.config.get('VERIFY_SSL', True)
+        self.verify_ssl = self.config.getboolean('VERIFY_SSL', True)
         self.set_hwclock_switch()
         fix_clock()
         self.auto_update()
@@ -297,7 +297,7 @@ class Agent:
 
     def auto_update(self):
         """ Checks for and applies new agent updates if available """
-        if not self.config['AUTO_UPDATE']:
+        if not self.config.getboolean('AUTO_UPDATE'):
             logging.debug('Auto update is disabled')
             return
         logging.info('Checking for updates')
@@ -339,7 +339,7 @@ class Agent:
         """
         logging.debug('Starting clock watch thread')
         while True:
-            wait = int(self.config['CHECK_INTERVAL'])
+            wait = self.config.getint('CHECK_INTERVAL')
             if self.clock_jumped():
                 fix_clock()
                 wait += 300
@@ -479,7 +479,7 @@ def start_daemon(agent, test=False):
             agent.auto_update()
             parse_instructions(agent)
 
-        sleep(int(agent.config['CHECK_INTERVAL']))
+        sleep(agent.config.getint('CHECK_INTERVAL'))
         if test:
             break
 

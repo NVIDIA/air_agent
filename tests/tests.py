@@ -8,7 +8,6 @@ import json
 import subprocess
 import sys
 import threading
-from copy import deepcopy
 from datetime import datetime
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
@@ -18,14 +17,12 @@ from cryptography.fernet import Fernet
 import agent
 import executors
 from agent import Agent
-
-MOCK_INI = {'AGENT': {'CHECK_INTERVAL': 60, 'AIR_API': 'http://localhost:8000', 'KEY_DIR': './',
-                      'LOG_LEVEL': 'DEBUG', 'CHANNEL_PATH': '/dev/virtio-ports/air',
-                      'AUTO_UPDATE': False, 'GIT_URL': 'http://localhost/test.git',
-                      'GIT_BRANCH': 'master', 'VERSION_URL': 'http://localhost/version'}}
-MOCK_CONFIG = MOCK_INI['AGENT']
+from . import util
 
 class TestAgentIdentity(TestCase):
+    def setUp(self):
+        self.config = util.load_config()
+
     @patch('subprocess.run')
     @patch('glob.glob', return_value=['./uuid_123.txt'])
     @patch('builtins.open')
@@ -35,9 +32,9 @@ class TestAgentIdentity(TestCase):
         mock_file = MagicMock()
         mock_file.read = MagicMock(return_value='ABC\n')
         mock_open.return_value.__enter__.return_value = mock_file
-        agent_obj = Agent(MOCK_CONFIG)
+        agent_obj = Agent(self.config)
         res = agent_obj.get_identity()
-        key_dir = MOCK_CONFIG['KEY_DIR']
+        key_dir = self.config['KEY_DIR']
         mock_open.assert_called_with(f'{key_dir}uuid_123.txt')
         self.assertEqual(res, 'abc')
 
@@ -47,10 +44,10 @@ class TestAgentIdentity(TestCase):
     @patch('agent.parse_instructions')
     @patch('agent.fix_clock')
     def test_get_identity_failed_umount(self, mock_fix, mock_parse, mock_log, mock_run):
-        agent_obj = Agent(MOCK_CONFIG)
+        agent_obj = Agent(self.config)
         res = agent_obj.get_identity()
         self.assertIsNone(res)
-        key_dir = MOCK_CONFIG['KEY_DIR']
+        key_dir = self.config['KEY_DIR']
         mock_log.assert_called_with(f'{key_dir} is not mounted')
 
     @patch('subprocess.run', side_effect=[True, True, True, subprocess.CalledProcessError(1, 'a')])
@@ -58,10 +55,10 @@ class TestAgentIdentity(TestCase):
     @patch('agent.parse_instructions')
     @patch('agent.fix_clock')
     def test_get_identity_failed_mount(self, mock_fix, mock_parse, mock_log, mock_run):
-        agent_obj = Agent(MOCK_CONFIG)
+        agent_obj = Agent(self.config)
         res = agent_obj.get_identity()
         self.assertIsNone(res)
-        key_dir = MOCK_CONFIG['KEY_DIR']
+        key_dir = self.config['KEY_DIR']
         mock_log.assert_called_with(f'Failed to refresh {key_dir}')
 
     @patch('subprocess.run')
@@ -70,7 +67,7 @@ class TestAgentIdentity(TestCase):
     @patch('agent.parse_instructions')
     @patch('agent.fix_clock')
     def test_get_identity_no_file(self, mock_fix, mock_parse, mock_log, mock_glob, mock_run):
-        agent_obj = Agent(MOCK_CONFIG)
+        agent_obj = Agent(self.config)
         res = agent_obj.get_identity()
         self.assertIsNone(res)
         mock_log.assert_called_with('Failed to find identity file')
@@ -79,12 +76,13 @@ class TestAgent(TestCase):
     @patch('agent.parse_instructions')
     @patch('agent.fix_clock')
     def setUp(self, mock_fix, mock_parse):
+        self.config = util.load_config()
         self.mock_id = MagicMock(return_value='123-456')
         Agent.get_identity = self.mock_id
-        self.agent = Agent(MOCK_CONFIG)
+        self.agent = Agent(self.config)
 
     def test_init(self):
-        self.assertDictEqual(self.agent.config, MOCK_CONFIG)
+        self.assertEqual(self.agent.config, self.config)
         self.mock_id.assert_called()
         self.assertEqual(self.agent.identity, '123-456')
         self.assertFalse(self.agent.monitoring)
@@ -95,32 +93,30 @@ class TestAgent(TestCase):
     @patch('agent.Agent.auto_update')
     @patch('agent.fix_clock')
     def test_init_no_verify_ssl(self, _mock_parse, _mock_update, _mock_fix):
-        config = deepcopy(MOCK_CONFIG)
-        config['VERIFY_SSL'] = False
-        test_agent = Agent(config)
+        self.config['VERIFY_SSL'] = 'False'
+        test_agent = Agent(self.config)
         self.assertFalse(test_agent.verify_ssl)
 
     @patch('agent.parse_instructions')
     @patch('agent.Agent.auto_update')
     @patch('agent.fix_clock')
     def test_init_update(self, mock_fix, mock_update, mock_parse):
-        Agent(MOCK_CONFIG)
+        Agent(self.config)
         mock_update.assert_called()
 
     @patch('agent.parse_instructions')
     @patch('agent.Agent.auto_update')
     @patch('agent.fix_clock')
     def test_init_fix_clock(self, mock_fix, mock_update, mock_parse):
-        Agent(MOCK_CONFIG)
+        Agent(self.config)
         mock_fix.assert_called()
 
     @patch('agent.parse_instructions')
     @patch('agent.Agent.auto_update')
     @patch('agent.fix_clock')
     def test_init_redirect(self, _mock_fix, _mock_update, _mock_parse):
-        config = deepcopy(MOCK_CONFIG)
-        config['AIR_API'] = 'http://air.cumulusnetworks.com'
-        test_agent = Agent(config)
+        self.config['AIR_API'] = 'http://air.cumulusnetworks.com'
+        test_agent = Agent(self.config)
         self.assertEqual(test_agent.config['AIR_API'], 'http://air.nvidia.com')
 
     def test_check_identity(self):
@@ -166,8 +162,8 @@ class TestAgent(TestCase):
         self.mock_id.return_value = '000-000'
         self.agent.decrypt_instructions = MagicMock(return_value=instructions)
         res = self.agent.get_instructions()
-        self.assertDictEqual(res, instructions)
-        url = MOCK_CONFIG['AIR_API'] + 'simulation-node/000-000/instructions/'
+        self.assertEqual(res, instructions)
+        url = self.config['AIR_API'] + 'simulation-node/000-000/instructions/'
         mock_get.assert_called_with(url, timeout=10, verify=self.agent.verify_ssl)
 
 
@@ -190,7 +186,7 @@ class TestAgent(TestCase):
 
     @patch('requests.delete')
     def test_delete_instructions(self, mock_delete):
-        url = MOCK_CONFIG['AIR_API'] + f'simulation-node/{self.agent.identity}/instructions/'
+        url = self.config['AIR_API'] + f'simulation-node/{self.agent.identity}/instructions/'
         self.agent.delete_instructions()
         mock_delete.assert_called_with(url, verify=self.agent.verify_ssl)
 
@@ -354,14 +350,13 @@ class TestAgent(TestCase):
     def test_auto_update(self, mock_fix, mock_parse, mock_exec, mock_move, mock_ls, mock_cwd,
                          mock_clone, mock_rm, mock_get):
         mock_get.return_value.text = 'AGENT_VERSION = \'2.0.0\'\n'
-        config = deepcopy(MOCK_CONFIG)
-        testagent = Agent(config)
-        testagent.config['AUTO_UPDATE'] = True
+        testagent = Agent(self.config)
+        testagent.config['AUTO_UPDATE'] = 'True'
         testagent.auto_update()
-        mock_get.assert_called_with(MOCK_CONFIG['VERSION_URL'])
+        mock_get.assert_called_with(self.config['VERSION_URL'])
         mock_rm.assert_called_with('/tmp/air-agent')
-        mock_clone.assert_called_with(MOCK_CONFIG['GIT_URL'], '/tmp/air-agent',
-                                      branch=MOCK_CONFIG['GIT_BRANCH'])
+        mock_clone.assert_called_with(self.config['GIT_URL'], '/tmp/air-agent',
+                                      branch=self.config['GIT_BRANCH'])
         mock_move.assert_called_with('/tmp/air-agent/test.py', '/tmp/foo/test.py')
         mock_exec.assert_called_with(sys.executable, ['python3'] + sys.argv)
 
@@ -373,9 +368,8 @@ class TestAgent(TestCase):
     @patch('agent.fix_clock')
     def test_auto_update_latest(self, mock_fix, mock_log, mock_parse, mock_clone, mock_get):
         mock_get.return_value.text = 'AGENT_VERSION = \'1.4.3\'\n'
-        config = deepcopy(MOCK_CONFIG)
-        testagent = Agent(config)
-        testagent.config['AUTO_UPDATE'] = True
+        testagent = Agent(self.config)
+        testagent.config['AUTO_UPDATE'] = 'True'
         testagent.auto_update()
         mock_clone.assert_not_called()
         mock_log.assert_called_with('Already running the latest version')
@@ -387,9 +381,8 @@ class TestAgent(TestCase):
     @patch('logging.error')
     @patch('agent.fix_clock')
     def test_auto_update_check_fail(self, mock_fix, mock_log, mock_parse, mock_clone, mock_get):
-        config = deepcopy(MOCK_CONFIG)
-        testagent = Agent(config)
-        testagent.config['AUTO_UPDATE'] = True
+        testagent = Agent(self.config)
+        testagent.config['AUTO_UPDATE'] = 'True'
         testagent.auto_update()
         mock_clone.assert_not_called()
         mock_log.assert_called_with('Failed to check for updates: foo')
@@ -407,14 +400,13 @@ class TestAgent(TestCase):
     def test_auto_update_rm_safe(self, mock_fix, mock_parse, mock_exec, mock_move, mock_ls,
                                  mock_cwd, mock_clone, mock_rm, mock_get):
         mock_get.return_value.text = 'AGENT_VERSION = \'2.0.0\'\n'
-        config = deepcopy(MOCK_CONFIG)
-        testagent = Agent(config)
-        testagent.config['AUTO_UPDATE'] = True
+        testagent = Agent(self.config)
+        testagent.config['AUTO_UPDATE'] = 'True'
         testagent.auto_update()
-        mock_get.assert_called_with(MOCK_CONFIG['VERSION_URL'])
+        mock_get.assert_called_with(self.config['VERSION_URL'])
         mock_rm.assert_called_with('/tmp/air-agent')
-        mock_clone.assert_called_with(MOCK_CONFIG['GIT_URL'], '/tmp/air-agent',
-                                      branch=MOCK_CONFIG['GIT_BRANCH'])
+        mock_clone.assert_called_with(self.config['GIT_URL'], '/tmp/air-agent',
+                                      branch=self.config['GIT_BRANCH'])
         mock_move.assert_called_with('/tmp/air-agent/test.py', '/tmp/foo/test.py')
         mock_exec.assert_called_with(sys.executable, ['python3'] + sys.argv)
 
@@ -432,9 +424,8 @@ class TestAgent(TestCase):
     def test_auto_update_error(self, mock_fix, mock_log, mock_parse, mock_exec, mock_move, mock_ls,
                                mock_cwd, mock_clone, mock_rm, mock_get):
         mock_get.return_value.text = 'AGENT_VERSION = \'2.0.0\'\n'
-        config = deepcopy(MOCK_CONFIG)
-        testagent = Agent(config)
-        testagent.config['AUTO_UPDATE'] = True
+        testagent = Agent(self.config)
+        testagent.config['AUTO_UPDATE'] = 'True'
         testagent.auto_update()
         mock_exec.assert_not_called()
         mock_log.assert_called_with('Failed to update agent: foo')
@@ -445,7 +436,7 @@ class TestAgent(TestCase):
     def test_clock_watch(self, mock_sleep, mock_fix, mock_jump):
         self.agent.clock_watch(test=True)
         mock_fix.assert_called()
-        mock_sleep.assert_called_with(self.agent.config['CHECK_INTERVAL'] + 300)
+        mock_sleep.assert_called_with(self.agent.config.getint('CHECK_INTERVAL') + 300)
 
     @patch('agent.Agent.clock_jumped', return_value=False)
     @patch('agent.fix_clock')
@@ -453,7 +444,7 @@ class TestAgent(TestCase):
     def test_clock_watch_no_jump(self, mock_sleep, mock_fix, mock_jump):
         self.agent.clock_watch(test=True)
         mock_fix.assert_not_called()
-        mock_sleep.assert_called_with(self.agent.config['CHECK_INTERVAL'])
+        mock_sleep.assert_called_with(self.agent.config.getint('CHECK_INTERVAL'))
 
     def test_unlock(self):
         self.agent.lock.acquire()
@@ -471,14 +462,15 @@ class TestAgentFunctions(TestCase):
             self.read = MagicMock()
 
     def setUp(self):
+        self.config = util.load_config()
         self.mock_parse = self.MockConfigParser()
 
     @patch('configparser.ConfigParser')
     def test_load_config(self, mock_confparse):
         mock_confparse.return_value = self.mock_parse
-        self.mock_parse['AGENT'] = MOCK_CONFIG
+        self.mock_parse['AGENT'] = self.config
         res = agent.load_config('test.txt')
-        self.assertDictEqual(res, MOCK_CONFIG)
+        self.assertEqual(res, self.config)
         self.mock_parse.read.assert_called_with('test.txt')
 
     @patch('configparser.ConfigParser')
@@ -520,13 +512,13 @@ class TestAgentFunctions(TestCase):
         mock_threading.side_effect = [mock_signal_thread, mock_clock_thread]
         mock_exec.EXECUTOR_MAP = {'shell': MagicMock()}
         Agent.get_identity = MagicMock(return_value='123-456')
-        agent_obj = Agent(MOCK_CONFIG)
+        agent_obj = Agent(self.config)
         agent_obj.check_identity = MagicMock(return_value=False)
         agent_obj.delete_instructions = MagicMock()
         agent.start_daemon(agent_obj, test=True)
         mock_exec.EXECUTOR_MAP['shell'].assert_called_with('foo')
         agent_obj.delete_instructions.assert_called()
-        mock_sleep.assert_called_with(MOCK_CONFIG['CHECK_INTERVAL'])
+        mock_sleep.assert_called_with(self.config.getint('CHECK_INTERVAL'))
         mock_for_assert = MagicMock()
         mock_for_assert(target=agent_obj.clock_watch)
         mock_for_assert(target=agent_obj.signal_watch)
@@ -543,7 +535,7 @@ class TestAgentFunctions(TestCase):
     def test_start_daemon_no_change(self, mock_fix, mock_threading, mock_parse, mock_sleep,
                                     mock_exec):
         Agent.get_identity = MagicMock(return_value='123-456')
-        agent_obj = Agent(MOCK_CONFIG)
+        agent_obj = Agent(self.config)
         agent_obj.get_instructions = MagicMock()
         agent_obj.check_identity = MagicMock(return_value=True)
         agent.start_daemon(agent_obj, test=True)
@@ -560,7 +552,7 @@ class TestAgentFunctions(TestCase):
                                          mock_exec):
         mock_exec.EXECUTOR_MAP = {'shell': MagicMock(return_value=False)}
         Agent.get_identity = MagicMock(return_value='123-456')
-        agent_obj = Agent(MOCK_CONFIG)
+        agent_obj = Agent(self.config)
         agent_obj.check_identity = MagicMock(return_value=False)
         agent_obj.identity = '000-000'
         agent_obj.delete_instructions = MagicMock()
