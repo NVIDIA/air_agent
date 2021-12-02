@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -e # exit on error
+
 who=`whoami`
 if [ $who != 'root' ]; then
     echo 'Install script must be run as root'
@@ -33,7 +35,7 @@ install_service() {
 echo "####################################"
 echo "# Installing pip requirements      #"
 echo "####################################"
-pip3 install -r ./requirements.txt
+python3 -m pip install -r ./requirements.txt
 echo "Done!"
 
 echo "####################################"
