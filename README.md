@@ -33,4 +33,4 @@ For python < 3.6, you must install from the `python3.4` branch.
 
 ## Configuration
 
-Configuration options are set in `/etc/cumulus-air/agent.ini`. After making configuration changes, the service must be restarted with `systemctl restart air-agent`.
+Configuration options are set in `/etc/nvidia-air/agent.ini`. After making configuration changes, the service must be restarted with `systemctl restart air-agent`.

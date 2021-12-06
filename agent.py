@@ -370,11 +370,11 @@ def parse_args():
     Helper function to provide command line arguments for the agent
     """
     year = datetime.now().year
-    parser = argparse.ArgumentParser(description=f'AIR Agent service (Cumulus Networks © {year})')
+    parser = argparse.ArgumentParser(description=f'AIR Agent service (NVIDIA © {year})')
     parser.add_argument('-c', '--config-file',
                         help='Location of the service\'s config file ' + \
-                             '(default: /etc/cumulus-air/agent.ini)',
-                        default='/etc/cumulus-air/agent.ini')
+                             '(default: /etc/nvidia-air/agent.ini)',
+                        default='/etc/nvidia-air/agent.ini')
     return parser.parse_args()
 
 def parse_instructions(agent, attempt=1, channel=None, lock=True):
