@@ -491,11 +491,11 @@ class TestAgentFunctions(TestCase):
         res = agent.parse_args()
         year = datetime.now().year
         mock_argparse.assert_called_with(description='AIR Agent service ' + \
-                                         f'(Cumulus Networks © {year})')
+                                         f'(NVIDIA © {year})')
         mock_parser.add_argument.assert_called_with('-c', '--config-file',
                                                     help='Location of the service\'s config ' + \
-                                                    'file (default: /etc/cumulus-air/agent.ini)',
-                                                    default='/etc/cumulus-air/agent.ini')
+                                                    'file (default: /etc/nvidia-air/agent.ini)',
+                                                    default='/etc/nvidia-air/agent.ini')
         self.assertEqual(res, 'foo')
 
     @patch('agent.executors')
