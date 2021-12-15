@@ -817,18 +817,27 @@ class TestPlatformDetect(TestCase):
         mock_exec.side_effect = [cmd1, cmd2]
         res = platform_detect.detect()
         self.assertEqual(res, ('Ubuntu', '20.04'))
+        mock_for_assert = MagicMock()
+        mock_for_assert(['lsb_release', '-i'], check=True, stdout=subprocess.PIPE)
+        mock_for_assert(['lsb_release', '-r'], check=True, stdout=subprocess.PIPE)
+        self.assertEqual(mock_exec.mock_calls, mock_for_assert.mock_calls)
     
     @patch('subprocess.run', side_effect=Exception)
     @patch('logging.warning')
     def test_detect_fail_os(self, mock_log, mock_exec):
-        res = platform_detect.detect()
+        os, release = platform_detect.detect()
         mock_log.assert_called_with('Platform detection failed to determine OS')
+        self.assertIsNone(os)
+        self.assertIsNone(release)
 
     @patch('subprocess.run')
     @patch('logging.warning')
-    def test_detect_fail_os(self, mock_log, mock_exec):
+    def test_detect_fail_release(self, mock_log, mock_exec):
+        os_str = b'Ubuntu'
         cmd1 = MagicMock()
-        cmd1.stdout = b'Distributor ID:\tUbuntu\n'
+        cmd1.stdout = b'Distributor ID:\t' + os_str + b'\n'
         mock_exec.side_effect = [cmd1, Exception]
-        res = platform_detect.detect()
+        os, release = platform_detect.detect()
         mock_log.assert_called_with('Platform detection failed to determine Release')
+        self.assertEqual(os, os_str.decode())
+        self.assertIsNone(release)
