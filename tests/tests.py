@@ -16,6 +16,7 @@ from cryptography.fernet import Fernet
 
 import agent
 import executors
+import platform_detect
 from agent import Agent
 from . import util
 
@@ -43,7 +44,9 @@ class TestAgentIdentity(TestCase):
     @patch('logging.debug')
     @patch('agent.parse_instructions')
     @patch('agent.fix_clock')
-    def test_get_identity_failed_umount(self, mock_fix, mock_parse, mock_log, mock_run):
+    @patch('agent.platform_detect.detect', return_value=(None, None))
+    def test_get_identity_failed_umount(self, mock_detect, mock_fix, mock_parse, mock_log,
+                                        mock_run):
         agent_obj = Agent(self.config)
         res = agent_obj.get_identity()
         self.assertIsNone(res)
@@ -54,7 +57,8 @@ class TestAgentIdentity(TestCase):
     @patch('logging.error')
     @patch('agent.parse_instructions')
     @patch('agent.fix_clock')
-    def test_get_identity_failed_mount(self, mock_fix, mock_parse, mock_log, mock_run):
+    @patch('agent.platform_detect.detect', return_value=(None, None))
+    def test_get_identity_failed_mount(self, mock_detect, mock_fix, mock_parse, mock_log, mock_run):
         agent_obj = Agent(self.config)
         res = agent_obj.get_identity()
         self.assertIsNone(res)
@@ -687,6 +691,19 @@ class TestAgentFunctions(TestCase):
         mock_agent.lock.acquire.assert_called()
         mock_agent.unlock.assert_called()
 
+    @patch('agent.executors')
+    @patch('logging.debug')
+    def test_parse_instructions_os_none(self, mock_log, mock_exec):
+        mock_exec.EXECUTOR_MAP = {'init': MagicMock(side_effect=[1, 2])}
+        mock_agent = MagicMock()
+        mock_agent.get_instructions.return_value = [
+            {'executor': 'init', 'data': '{"hostname": "test"}', 'monitor': None}
+        ]
+        mock_agent.os = None
+        agent.parse_instructions(mock_agent)
+        mock_log.assert_called_with('Skipping init instructions due to missing os')
+
+
     @patch('subprocess.check_output',
            return_value=b'ntp.service\nfoo.service\nntp@mgmt.service\nchrony.service')
     @patch('subprocess.call')
@@ -777,3 +794,41 @@ class TestExecutors(TestCase):
         self.assertFalse(res)
         mock_log.assert_called_with('Failed to decode instructions as JSON: ' + \
                                     'Expecting value: line 1 column 38 (char 37)')
+
+    @patch('executors.shell')
+    def test_init(self, mock_shell):
+        res = executors.init('{"hostname": "test"}')
+        self.assertTrue(res)
+
+    @patch('logging.error')
+    def test_init_json_parse_failed(self, mock_log):
+        res = executors.init('string')
+        mock_log.assert_called_with('Failed to decode init data as JSON: ' + \
+                                    'Expecting value: line 1 column 1 (char 0)')
+        self.assertFalse(res)
+
+class TestPlatformDetect(TestCase):
+    @patch('subprocess.run')
+    def test_detect(self, mock_exec):
+        cmd1 = MagicMock()
+        cmd1.stdout = b'Distributor ID:\tUbuntu\n'
+        cmd2 = MagicMock()
+        cmd2.stdout = b'Release:\t20.04\n'
+        mock_exec.side_effect = [cmd1, cmd2]
+        res = platform_detect.detect()
+        self.assertEqual(res, ('Ubuntu', '20.04'))
+    
+    @patch('subprocess.run', side_effect=Exception)
+    @patch('logging.warning')
+    def test_detect_fail_os(self, mock_log, mock_exec):
+        res = platform_detect.detect()
+        mock_log.assert_called_with('Platform detection failed to determine OS')
+
+    @patch('subprocess.run')
+    @patch('logging.warning')
+    def test_detect_fail_os(self, mock_log, mock_exec):
+        cmd1 = MagicMock()
+        cmd1.stdout = b'Distributor ID:\tUbuntu\n'
+        mock_exec.side_effect = [cmd1, Exception]
+        res = platform_detect.detect()
+        mock_log.assert_called_with('Platform detection failed to determine Release')

@@ -69,4 +69,27 @@ def file(instructions):
             success = False
     return success
 
-EXECUTOR_MAP = {'file': file, 'shell': shell}
+def init(data):
+    """
+    Executor for init instructions
+
+    Arguments:
+    data (dict) - A dictionary containing the init instruction data
+
+    Returns:
+    bool - True if all init instructions were executed successfully
+    """
+    success = True
+    try:
+        json_data = json.loads(data)
+    except json.decoder.JSONDecodeError as err:
+        logging.error(f'Failed to decode init data as JSON: {err}')
+        return False
+
+    if 'hostname' in json_data.keys():
+        logging.info(f'EXEC init :: setting hostname to {json_data["hostname"]}')
+        success = shell(f'hostnamectl set-hostname {json_data["hostname"]}')
+
+    return success
+
+EXECUTOR_MAP = {'file': file, 'shell': shell, 'init': init}

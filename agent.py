@@ -26,6 +26,7 @@ import git
 import requests
 
 import executors
+import platform_detect
 from version import AGENT_VERSION
 
 class Agent:
@@ -44,6 +45,7 @@ class Agent:
         fix_clock()
         self.auto_update()
         logging.info(f'Initializing with identity {self.identity}')
+        self.os, self.release = platform_detect.detect()
 
     def unlock(self):
         """ Unlocks the agent lock if locked """
@@ -408,6 +410,9 @@ def parse_instructions(agent, attempt=1, channel=None, lock=True):
         return False
     for instruction in instructions:
         executor = instruction['executor']
+        if executor == 'init' and not agent.os:
+            logging.debug('Skipping init instructions due to missing os')
+            continue
         if instruction.get('monitor'):
             agent.monitoring = True
             threading.Thread(target=agent.monitor, args=(channel,),
