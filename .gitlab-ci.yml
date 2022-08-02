@@ -10,10 +10,11 @@ cache:
     - .cache/pip
 
 static:
-  stage: test
-  before_script:
-    - pip install semgrep
-  script: semgrep --error --config=p/r2c-ci .
+  image: returntocorp/semgrep-agent:v1
+  script: semgrep-agent
+  variables:
+    SEMGREP_RULES: >-
+      p/r2c-ci
   only:
     changes:
       - "**/*.py"
