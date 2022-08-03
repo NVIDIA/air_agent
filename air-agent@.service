@@ -1,5 +1,5 @@
 [Unit]
-Description=Cumulus AIR Agent Service
+Description=NVIDIA Air Agent Service
 After=syslog.target
 
 [Service]
