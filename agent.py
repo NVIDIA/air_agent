@@ -1,6 +1,9 @@
+# SPDX-FileCopyrightText: Copyright (c) 2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """
-The AIR Agent is a systemd service that detects if a VM has been cloned.
-When a clone operation has been detected, it calls out to the AIR API to see if there are any
+The NVIDIA Air Agent is a systemd service that detects if a VM has been cloned.
+When a clone operation has been detected, it calls out to the Air API to see if there are any
 post-clone instructions available to execute.
 """
 
@@ -141,7 +144,7 @@ class Agent:
 
     def decrypt_instructions(self, instructions, identity):
         """
-        Decrypts a set of instructions received from the AIR API
+        Decrypts a set of instructions received from the Air API
 
         Arguments:
         instructions (list) - A list of encrypted instructions received from the API
@@ -162,7 +165,7 @@ class Agent:
 
     def get_instructions(self):
         """
-        Fetches a set of post-clone instructions from the AIR API
+        Fetches a set of post-clone instructions from the Air API
 
         Returns:
         list - A list of instructions on success, or False if an error occurred
@@ -187,7 +190,7 @@ class Agent:
 
     def delete_instructions(self):
         """
-        Deletes instructions via the AIR API. This serves as an indication that the instructions
+        Deletes instructions via the Air API. This serves as an indication that the instructions
         have been successfully executed (i.e. they do not need to be re-tried)
         """
         logging.debug('Deleting post-clone instructions')
@@ -201,7 +204,7 @@ class Agent:
 
     def signal_watch(self, attempt=1, test=False):
         """
-        Waits for a signal from the AIR Worker and proceeds accordingly. This runs in a loop
+        Waits for a signal from the Air Worker and proceeds accordingly. This runs in a loop
         so it is intended to be executed in a separate thread.
 
         Arguments:
@@ -372,7 +375,7 @@ def parse_args():
     Helper function to provide command line arguments for the agent
     """
     year = datetime.now().year
-    parser = argparse.ArgumentParser(description=f'AIR Agent service (NVIDIA © {year})')
+    parser = argparse.ArgumentParser(description=f'Air Agent service (NVIDIA © {year})')
     parser.add_argument('-c', '--config-file',
                         help='Location of the service\'s config file ' + \
                              '(default: /etc/nvidia-air/agent.ini)',
@@ -381,7 +384,7 @@ def parse_args():
 
 def parse_instructions(agent, attempt=1, channel=None, lock=True):
     """
-    Parses and executes a set of instructions from the AIR API
+    Parses and executes a set of instructions from the Air API
 
     Arguments:
     agent (Agent) - An Agent instance
@@ -499,5 +502,5 @@ if __name__ == '__main__':
                         format='%(asctime)s %(levelname)s %(message)s')
     AGENT = Agent(CONFIG)
 
-    logging.info(f'Starting AIR Agent daemon v{AGENT_VERSION}')
+    logging.info(f'Starting Air Agent daemon v{AGENT_VERSION}')
     start_daemon(AGENT)

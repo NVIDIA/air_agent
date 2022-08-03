@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2022 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 """
 Unit tests for Agent module
 """
@@ -494,7 +497,7 @@ class TestAgentFunctions(TestCase):
         mock_parser.parse_args.return_value = 'foo'
         res = agent.parse_args()
         year = datetime.now().year
-        mock_argparse.assert_called_with(description='AIR Agent service ' + \
+        mock_argparse.assert_called_with(description='Air Agent service ' + \
                                          f'(NVIDIA © {year})')
         mock_parser.add_argument.assert_called_with('-c', '--config-file',
                                                     help='Location of the service\'s config ' + \
@@ -821,7 +824,7 @@ class TestPlatformDetect(TestCase):
         mock_for_assert(['lsb_release', '-i'], check=True, stdout=subprocess.PIPE)
         mock_for_assert(['lsb_release', '-r'], check=True, stdout=subprocess.PIPE)
         self.assertEqual(mock_exec.mock_calls, mock_for_assert.mock_calls)
-    
+
     @patch('subprocess.run', side_effect=Exception)
     @patch('logging.warning')
     def test_detect_fail_os(self, mock_log, mock_exec):
