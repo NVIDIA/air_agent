@@ -29,7 +29,17 @@ Make sure `python3` and `pip3` are installed, and then run:
 
 `sudo ./install.sh`
 
-For python < 3.6, you must install from the `python3.4` branch.
+_**NOTE:** For python < 3.6, you must install from the `python3.4` branch._
+
+### For devices where connectivity to Air is desired over a VRF
+
+Pass the desired VRF name to the install script:
+
+`sudo ./install.sh -v <VRF>`
+
+For example, in newer Cumulus Linux versions where eth0 is configured in the mgmt VRF by default:
+
+`sudo ./install.sh -v mgmt`
 
 ## Configuration
 
