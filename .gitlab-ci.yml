@@ -34,11 +34,14 @@ unit:
   stage: test
   before_script:
     - pip install coverage pytest -r requirements.txt
-  script:
-    - coverage run --omit='tests/*,**/__init__.py,version.py' --source='./' `which pytest` tests/tests.py
+  script: |
+    coverage run --omit='tests/*,**/__init__.py,version.py' --source='./' `which pytest` tests/tests.py
+    coverage report -m | tee /tmp/coverage
+    coverage=$(cat /tmp/coverage | grep -i total | tr -s ' ' | cut -d ' ' -f 4 | cut -d '%' -f 1)
+    if (( $coverage < 80 )); then echo 'ERROR: Coverage below accepted threshold!'; exit 1; fi
   after_script:
-    - coverage report -m
     - coverage html
+  coverage: '/(?i)total.*? (100(?:\.0+)?\%|[1-9]?\d(?:\.\d+)?\%)$/'
   except:
     - tags
   artifacts:
