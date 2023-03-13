@@ -244,6 +244,22 @@ class TestAgent(TestCase):
         self.agent.signal_watch(attempt=3, test=True)
         mock_sleep.assert_called_with(30)
 
+    @patch('agent.parse_instructions', return_value=True)
+    @patch('agent.sleep')
+    @patch('subprocess.run')
+    @patch('builtins.open')
+    def test_signal_watch_resize(self, mock_open, mock_run, *args):
+        rows = 10
+        cols = 20
+        mock_channel = MagicMock()
+        mock_channel.readline.return_value = f'123456:resize_{rows}_{cols}\n'.encode('utf-8')
+        mock_open.return_value = mock_channel
+        self.agent.signal_watch(test=True)
+        mock_for_assert = MagicMock()
+        mock_for_assert(['stty', '-F', '/dev/ttyS0', 'rows', str(rows)], check=False)
+        mock_for_assert(['stty', '-F', '/dev/ttyS0', 'cols', str(cols)], check=False)
+        self.assertEqual(mock_run.mock_calls, mock_for_assert.mock_calls)
+
     @patch('builtins.open')
     @patch('time.time', return_value=123456.90)
     @patch('os.path.exists', side_effect=[False, True])
