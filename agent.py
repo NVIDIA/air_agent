@@ -229,6 +229,11 @@ class Agent:
                     else:
                         logging.debug('Channel error')
                         channel.write(f'{timestamp}:error\n'.encode('utf-8'))
+                elif signal.startswith('resize'):
+                    _, rows, cols = signal.strip('\n').split('_')
+                    logging.debug(f'resizing serial console: {rows}x{cols}')
+                    subprocess.run(['stty', '-F', '/dev/ttyS0', 'rows', str(rows)], check=False)
+                    subprocess.run(['stty', '-F', '/dev/ttyS0', 'cols', str(cols)], check=False)
                 sleep(1)
                 if test:
                     break
