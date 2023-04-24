@@ -495,7 +495,7 @@ def check_devices(config):
     Tests for the presence of the /dev/vdb device. If it exists, allow the agent to continue. If it does not
     exist, then exit with a success code so the service doesn't fail, but do not start the daemon thread
     """
-    device = config['KEY_DEVICE']
+    device = config.get('KEY_DEVICE', '/dev/vdb')
     if not os.path.exists(device):
         logging.info(f'{device} does not exist - agent will not be started')
         return False
@@ -514,7 +514,7 @@ def mount_device(config):
     Mounts /dev/vdb to the directory specified in the config file. Unmounts the directory before attempting
     the mount to refresh the contents in the event this node was cloned.
     """
-    device = config['KEY_DEVICE']
+    device = config.get('KEY_DEVICE', '/dev/vdb')
     key_dir = config['KEY_DIR']
     if not os.path.exists(key_dir):
         logging.debug(f'{key_dir} does not exist, creating')
