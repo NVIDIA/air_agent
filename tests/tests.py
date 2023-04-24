@@ -13,7 +13,7 @@ import sys
 import threading
 from datetime import datetime
 from unittest import TestCase
-from unittest.mock import MagicMock, patch
+from unittest.mock import call, MagicMock, patch
 
 from cryptography.fernet import Fernet
 
@@ -54,7 +54,7 @@ class TestAgentIdentity(TestCase):
         res = agent_obj.get_identity()
         self.assertIsNone(res)
         key_dir = self.config['KEY_DIR']
-        mock_log.assert_called_with(f'{key_dir} is not mounted')
+        mock_log.assert_called_with(f'{key_dir} exists but is not mounted')
 
     @patch('subprocess.run', side_effect=[True, True, True, subprocess.CalledProcessError(1, 'a')])
     @patch('logging.error')
@@ -748,6 +748,91 @@ class TestAgentFunctions(TestCase):
     def test_fix_clock_failed(self, mock_log, mock_run):
         agent.fix_clock()
         mock_log.assert_called_with('Failed to fix clock')
+
+    @patch('os.path.exists')
+    @patch('subprocess.run')
+    def test_check_devices(self, mock_run, mock_exists):
+        res = agent.check_devices(self.config)
+        self.assertTrue(res)
+
+    @patch('os.path.exists', return_value=False)
+    @patch('logging.info')
+    def test_check_devices_path_does_not_exist(self, mock_log, mock_exists):
+        res = agent.check_devices(self.config)
+        self.assertFalse(res)
+        mock_log.assert_called_with(f'{self.config["key_device"]} does not exist - agent will not be started')
+
+    @patch('os.path.exists')
+    @patch('agent.mount_device', return_value=False)
+    def test_check_devices_mount_failed(self, mock_mount, mock_exists):
+        res = agent.check_devices(self.config)
+        self.assertFalse(res)
+
+    @patch('os.path.exists')
+    @patch('agent.mount_device')
+    @patch('subprocess.run', side_effect=Exception)
+    @patch('logging.info')
+    def test_check_devices_ls_failed(self, mock_log, mock_run, mock_mount, mock_exists):
+        res = agent.check_devices(self.config)
+        self.assertFalse(res)
+        mock_log.assert_called_with(f'Failed to find expected files on {self.config["key_device"]} ' + \
+                                    'filesystem - agent will not be started')
+
+    @patch('os.path.exists')
+    @patch('subprocess.run')
+    def test_mount_device(self, mock_run, mock_exists):
+        res = agent.mount_device(self.config)
+        self.assertTrue(res)
+        mock_run.assert_called_with(f'mount {self.config["key_device"]} {self.config["key_dir"]} 2>/dev/null',
+                                    shell=True)
+
+    @patch('os.path.exists', return_value=False)
+    @patch('os.makedirs')
+    @patch('subprocess.run')
+    @patch('logging.debug')
+    def test_mount_device_directory_does_not_exist(self, mock_log, mock_run, mock_dir, mock_exists):
+        res = agent.mount_device(self.config)
+        self.assertTrue(res)
+        mock_log.assert_called_with(f'{self.config["key_dir"]} does not exist, creating')
+        mock_dir.assert_called_with(self.config['key_dir'])
+
+    @patch('os.path.exists')
+    @patch('subprocess.run')
+    def test_mount_device_directory_exists(self, mock_run, mock_exists):
+        res = agent.mount_device(self.config)
+        self.assertTrue(res)
+        mock_run.assert_has_calls([call(f'umount {self.config["key_dir"]} 2>/dev/null', shell=True),
+                                   call(f'mount {self.config["key_device"]} {self.config["key_dir"]} ' + \
+                                        '2>/dev/null', shell=True)])
+
+    @patch('os.path.exists', return_value = False)
+    @patch('os.makedirs', side_effect=Exception)
+    @patch('logging.error')
+    def test_mount_device_directory_create_failed(self, mock_log, mock_dir, mock_exists):
+        res = agent.mount_device(self.config)
+        self.assertFalse(res)
+        mock_log.assert_called_with(f'Failed to create the {self.config["key_dir"]} directory')
+        
+    @patch('os.path.exists')
+    @patch('subprocess.run')
+    @patch('logging.debug')
+    def test_mount_device_unmount_failed(self, mock_log, mock_run, mock_exists):
+        cmd2 = MagicMock()
+        mock_run.side_effect = [subprocess.CalledProcessError(1, 'a'), cmd2]
+        res = agent.mount_device(self.config)
+        self.assertTrue(res)
+        mock_log.assert_called_with(f'{self.config["key_dir"]} exists but is not mounted')
+
+    @patch('os.path.exists')
+    @patch('subprocess.run')
+    @patch('logging.error')
+    def test_mount_device_mount_failed(self, mock_log, mock_run, mock_exists):
+        cmd1 = MagicMock()
+        mock_run.side_effect = [cmd1, subprocess.CalledProcessError(1, 'a')]
+        res = agent.mount_device(self.config)
+        self.assertFalse(res)
+        mock_log.assert_called_with(f'Failed to mount {self.config["key_device"]} to ' + \
+                                    f'{self.config["key_dir"]}')
 
 class TestExecutors(TestCase):
     @patch('subprocess.run')

@@ -41,14 +41,6 @@ python3 -m pip install -r ./requirements.txt
 echo "Done!"
 
 echo "####################################"
-echo "# Creating key file mount          #"
-echo "####################################"
-mkdir /mnt/air
-echo '/dev/vdb /mnt/air auto defaults,nofail 0 0' >> /etc/fstab
-mount -a 2>/dev/null
-echo "Done!"
-
-echo "####################################"
 echo "# Installing air-agent             #"
 echo "####################################"
 mkdir -p /usr/local/lib/air-agent

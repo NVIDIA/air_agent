@@ -87,13 +87,7 @@ class Agent:
         str - The VM UUID (ex: 'abcdefab-0000-1111-2222-123456789012')
         """
         key_dir = self.config['KEY_DIR']
-        try:
-            subprocess.run(f'umount {key_dir} 2>/dev/null', shell=True)
-        except subprocess.CalledProcessError:
-            logging.debug(f'{key_dir} is not mounted')
-        try:
-            subprocess.run('mount -a 2>/dev/null', shell=True)
-        except:
+        if not mount_device(self.config):
             logging.error(f'Failed to refresh {key_dir}')
             logging.debug(traceback.format_exc())
             return None
@@ -496,6 +490,53 @@ def start_daemon(agent, test=False):
         if test:
             break
 
+def check_devices(config):
+    """
+    Tests for the presence of the /dev/vdb device. If it exists, allow the agent to continue. If it does not
+    exist, then exit with a success code so the service doesn't fail, but do not start the daemon thread
+    """
+    device = config['KEY_DEVICE']
+    if not os.path.exists(device):
+        logging.info(f'{device} does not exist - agent will not be started')
+        return False
+    if not mount_device(config):
+        return False
+    try:
+        subprocess.run('ls /mnt/air/uuid*', shell=True)
+    except:
+        logging.info(f'Failed to find expected files on {device} filesystem - agent will not be started')
+        logging.debug(traceback.format_exc())
+        return False
+    return True
+
+def mount_device(config):
+    """
+    Mounts /dev/vdb to the directory specified in the config file. Unmounts the directory before attempting
+    the mount to refresh the contents in the event this node was cloned.
+    """
+    device = config['KEY_DEVICE']
+    key_dir = config['KEY_DIR']
+    if not os.path.exists(key_dir):
+        logging.debug(f'{key_dir} does not exist, creating')
+        try:
+            os.makedirs(key_dir)
+        except:
+            logging.error(f'Failed to create the {key_dir} directory')
+            logging.debug(traceback.format_exc())
+            return False
+    else:
+        try:
+            subprocess.run(f'umount {key_dir} 2>/dev/null', shell=True)
+        except subprocess.CalledProcessError:
+            logging.debug(f'{key_dir} exists but is not mounted')
+    try:
+        subprocess.run(f'mount {device} {key_dir} 2>/dev/null', shell=True)
+    except:
+        logging.error(f'Failed to mount {device} to {key_dir}')
+        logging.debug(traceback.format_exc())
+        return False
+    return True
+
 if __name__ == '__main__':
     ARGS = parse_args()
     CONFIG = load_config(ARGS.config_file)
@@ -505,7 +546,11 @@ if __name__ == '__main__':
     LOG_FILE = CONFIG.get('LOG_FILE', '/var/log/air-agent.log')
     logging.basicConfig(filename=LOG_FILE, level=LOG_LEVEL,
                         format='%(asctime)s %(levelname)s %(message)s')
-    AGENT = Agent(CONFIG)
-
-    logging.info(f'Starting Air Agent daemon v{AGENT_VERSION}')
-    start_daemon(AGENT)
+    if check_devices(CONFIG):
+        AGENT = Agent(CONFIG)
+        logging.info(f'Starting Air Agent daemon v{AGENT_VERSION}')
+        start_daemon(AGENT)
+    # the necessary filesystem was not present or config files were missing,
+    # exit with a success code so the service does not fail
+    logging.critical('The agent was not started because the necessary files were not found!')
+    sys.exit(0)

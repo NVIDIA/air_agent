@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2023-04-24
+### Fixed
+- No requirement for a persistent mount entry in /etc/fstab
+- Agent exits gracefully if the mount is inaccessible or expected files do not exist
+
 ## [2.2.0] - 2023-03-13
 ### Added
 - Handling for terminal resize requests
