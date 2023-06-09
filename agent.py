@@ -211,7 +211,7 @@ class Agent:
             while True:
                 data = channel.readline().decode('utf-8')
                 logging.debug(f'Got signal data {data}')
-                signal = None
+                signal = ''
                 if data:
                     (timestamp, signal) = data.split(':')
                 if signal == 'checkinst\n':

@@ -244,6 +244,15 @@ class TestAgent(TestCase):
         self.agent.signal_watch(attempt=3, test=True)
         mock_sleep.assert_called_with(30)
 
+    @patch('agent.sleep')
+    @patch('builtins.open')
+    def test_signal_watch_empty(self, mock_open, *args):
+        mock_channel = MagicMock()
+        mock_channel.readline.return_value = b''
+        mock_open.return_value = mock_channel
+        self.agent.signal_watch(test=True)
+        mock_channel.close.assert_not_called()
+
     @patch('agent.parse_instructions', return_value=True)
     @patch('agent.sleep')
     @patch('subprocess.run')
