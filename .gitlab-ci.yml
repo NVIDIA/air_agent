@@ -24,7 +24,7 @@ static:
 lint:
   stage: test
   before_script:
-    - pip install pylint==2.4.4 pylint-quotes pylint-print==1.0.0 -r requirements.txt
+    - pip install pylint==2.4.4 pylint-quotes pylint-print==1.0.0 .
   script:
     - pylint *.py
   except:
@@ -33,7 +33,7 @@ lint:
 unit:
   stage: test
   before_script:
-    - pip install coverage pytest -r requirements.txt
+    - pip install coverage pytest -r .
   script: |
     coverage run --omit='tests/*,**/__init__.py,version.py' --source='./' `which pytest` tests/tests.py
     coverage report -m | tee /tmp/coverage
