@@ -8,7 +8,6 @@ post-clone instructions available to execute.
 """
 
 import argparse
-import configparser
 import glob
 import json
 import logging

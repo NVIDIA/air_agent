@@ -5,7 +5,7 @@ import os
 
 import configparser
 
-class Config(configparser.SectionProxy):
+class Config(configparser.SectionProxy): #pylint: disable=too-many-ancestors
     """ Wraps a ConfigParser dict-like to allow overriding the agent config via environment variables """
     def __init__(self, filename):
         parser = configparser.ConfigParser()
