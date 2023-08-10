@@ -43,4 +43,4 @@ For example, in newer Cumulus Linux versions where eth0 is configured in the mgm
 
 ## Configuration
 
-Configuration options are set in `/etc/nvidia-air/agent.ini`. After making configuration changes, the service must be restarted with `systemctl restart air-agent`.
+The Air platform dynamically injects an appropriate agent configuration into the VM via /mnt/air/agent.ini. This path can be overridden with the `-c`/`--config-file` command line argument.

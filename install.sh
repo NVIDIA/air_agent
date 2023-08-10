@@ -48,13 +48,6 @@ cp ./*.py /usr/local/lib/air-agent/
 echo "Done!"
 
 echo "####################################"
-echo "# Configuring air-agent            #"
-echo "####################################"
-mkdir -p /etc/nvidia-air
-cp ./agent.ini /etc/nvidia-air/agent.ini
-echo "Done!"
-
-echo "####################################"
 echo "# Enabling systemd service         #"
 echo "####################################"
 install_service $AIR_VRF
