@@ -44,3 +44,5 @@ For example, in newer Cumulus Linux versions where eth0 is configured in the mgm
 ## Configuration
 
 The Air platform dynamically injects an appropriate agent configuration into the VM via /mnt/air/agent.ini. This path can be overridden with the `-c`/`--config-file` command line argument.
+
+Additionally, individual settings can be overriden using environment variables prefixed with `AIR_AGENT_`. For example, to override the `LOG_LEVEL` setting, set an environment variable named `AIR_AGENT_LOG_LEVEL`.
