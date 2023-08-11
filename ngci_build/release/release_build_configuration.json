@@ -81,7 +81,7 @@
           "category": "Test",
           "container": "build-python:POD_AIR@lint",
           "parameters": {
-            "cmd": "pip install pylint==2.4.4 pylint-quotes pylint-print==1.0.0 -r requirements.txt && pylint *.py"
+            "cmd": "pip install pylint==2.4.4 pylint-quotes pylint-print==1.0.0 . && pylint *.py"
           },
           "skip": false,
           "on_failure": "stop",
@@ -93,7 +93,7 @@
           "category": "Test",
           "container": "build-python:POD_AIR@unit",
           "parameters": {
-            "pip_install": "coverage pytest -r requirements.txt",
+            "pip_install": "coverage pytest .",
             "cmd": "python3 -m coverage run --omit='tests/*,**/__init__.py,version.py' --source='./' `which pytest` tests/tests.py",
             "coverage_report" : true,
             "publish_html_dir": "htmlcov",

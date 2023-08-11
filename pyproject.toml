@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "agent"
+version = "2.3.2"
+license = "MIT"
+description = "The NVIDIA Air Agent is a systemd service that detects if a VM has been cloned."
+classifiers = ["Programming Language :: Python :: 3", "License :: OSI Approved :: MIT License", "Operating System :: OS Independent"]
+authors = ["NVIDIA Air <air-support@nvidia.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.7"
+cryptography = "40.0.2"
+gitpython = "3.1.7"
+requests = "2.31.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
