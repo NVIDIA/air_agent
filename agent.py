@@ -499,7 +499,7 @@ def mount_device(config):
     the mount to refresh the contents in the event this node was cloned.
     """
     device = config.get('KEY_DEVICE', '/dev/vdb')
-    key_dir = config['KEY_DIR']
+    key_dir = config.get('KEY_DIR', '/mnt/air')
     if not os.path.exists(key_dir):
         logging.debug(f'{key_dir} does not exist, creating')
         try:
@@ -524,13 +524,15 @@ def mount_device(config):
 if __name__ == '__main__':
     ARGS = parse_args()
     CONFIG = Config(ARGS.config_file)
-    LOG_LEVEL = 'WARNING'
-    if CONFIG['LOG_LEVEL'].upper() in ('CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG'):
+    if CONFIG.get('LOG_LEVEL', '').upper() in ('CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG'):
         LOG_LEVEL = CONFIG['LOG_LEVEL'].upper()
+    else:
+        LOG_LEVEL = 'WARNING'
     LOG_FILE = CONFIG.get('LOG_FILE', '/var/log/air-agent.log')
     logging.basicConfig(filename=LOG_FILE, level=LOG_LEVEL,
                         format='%(asctime)s %(levelname)s %(message)s')
     if check_devices(CONFIG):
+        CONFIG = Config(ARGS.config_file) # reload config in case key_dir was remounted
         AGENT = Agent(CONFIG)
         logging.info(f'Starting Air Agent daemon v{AGENT_VERSION}')
         start_daemon(AGENT)

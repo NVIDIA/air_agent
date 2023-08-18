@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.1] - 2023-08-18
+### Fixed
+- Freshly installed agents are unable to read their config files
+
 ## [3.0.0] - 2023-08-09
 ### Changed
 - Agent now expects a config file to be injected by the Air platform by default
