@@ -8,7 +8,6 @@ post-clone instructions available to execute.
 """
 
 import argparse
-import configparser
 import glob
 import json
 import logging
@@ -30,6 +29,7 @@ import requests
 
 import executors
 import platform_detect
+from config import Config
 from version import AGENT_VERSION
 
 class Agent:
@@ -351,34 +351,18 @@ class Agent:
             if kwargs.get('test'):
                 break
 
-def load_config(config_file):
-    """
-    Helper function to load the agent's config file
-
-    Arguments:
-    config_file (str) - The fully qualified path to the agent configuration file
-
-    Returns:
-    dict - A dictionary of all loaded config values
-    """
-    config = configparser.ConfigParser()
-    config.read(config_file)
-    try:
-        return config['AGENT']
-    except KeyError:
-        logging.critical(f'Failed to read config file from {config_file}')
-        sys.exit(1)
-
 def parse_args():
     """
     Helper function to provide command line arguments for the agent
     """
+    default_config_file = '/mnt/air/agent.ini'
     year = datetime.now().year
     parser = argparse.ArgumentParser(description=f'Air Agent service (NVIDIA © {year})')
     parser.add_argument('-c', '--config-file',
-                        help='Location of the service\'s config file ' + \
-                             '(default: /etc/nvidia-air/agent.ini)',
-                        default='/etc/nvidia-air/agent.ini')
+                        help='Location of the service\'s config file. ' + \
+                             'Normally this will be injected automatically by the Air platform ' + \
+                             f'(default: {default_config_file})',
+                        default=default_config_file)
     return parser.parse_args()
 
 def parse_instructions(agent, attempt=1, channel=None, lock=True):
@@ -515,7 +499,7 @@ def mount_device(config):
     the mount to refresh the contents in the event this node was cloned.
     """
     device = config.get('KEY_DEVICE', '/dev/vdb')
-    key_dir = config['KEY_DIR']
+    key_dir = config.get('KEY_DIR', '/mnt/air')
     if not os.path.exists(key_dir):
         logging.debug(f'{key_dir} does not exist, creating')
         try:
@@ -539,14 +523,16 @@ def mount_device(config):
 
 if __name__ == '__main__':
     ARGS = parse_args()
-    CONFIG = load_config(ARGS.config_file)
-    LOG_LEVEL = 'WARNING'
-    if CONFIG['LOG_LEVEL'].upper() in ('CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG'):
+    CONFIG = Config(ARGS.config_file)
+    if CONFIG.get('LOG_LEVEL', '').upper() in ('CRITICAL', 'ERROR', 'WARNING', 'INFO', 'DEBUG'):
         LOG_LEVEL = CONFIG['LOG_LEVEL'].upper()
+    else:
+        LOG_LEVEL = 'WARNING'
     LOG_FILE = CONFIG.get('LOG_FILE', '/var/log/air-agent.log')
     logging.basicConfig(filename=LOG_FILE, level=LOG_LEVEL,
                         format='%(asctime)s %(levelname)s %(message)s')
     if check_devices(CONFIG):
+        CONFIG = Config(ARGS.config_file) # reload config in case key_dir was remounted
         AGENT = Agent(CONFIG)
         logging.info(f'Starting Air Agent daemon v{AGENT_VERSION}')
         start_daemon(AGENT)

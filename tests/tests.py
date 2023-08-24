@@ -497,25 +497,9 @@ class TestAgentFunctions(TestCase):
         self.config = util.load_config()
         self.mock_parse = self.MockConfigParser()
 
-    @patch('configparser.ConfigParser')
-    def test_load_config(self, mock_confparse):
-        mock_confparse.return_value = self.mock_parse
-        self.mock_parse['AGENT'] = self.config
-        res = agent.load_config('test.txt')
-        self.assertEqual(res, self.config)
-        self.mock_parse.read.assert_called_with('test.txt')
-
-    @patch('configparser.ConfigParser')
-    @patch('logging.critical')
-    @patch('sys.exit')
-    def test_load_config_failed(self, mock_exit, mock_log, mock_confparse):
-        mock_confparse.return_value = self.mock_parse
-        agent.load_config('test.txt')
-        mock_log.assert_called_with('Failed to read config file from test.txt')
-        mock_exit.assert_called_with(1)
-
     @patch('argparse.ArgumentParser')
     def test_parse_args(self, mock_argparse):
+        default_config_file = '/mnt/air/agent.ini'
         mock_parser = MagicMock()
         mock_argparse.return_value = mock_parser
         mock_parser.add_argument = MagicMock()
@@ -524,10 +508,11 @@ class TestAgentFunctions(TestCase):
         year = datetime.now().year
         mock_argparse.assert_called_with(description='Air Agent service ' + \
                                          f'(NVIDIA © {year})')
-        mock_parser.add_argument.assert_called_with('-c', '--config-file',
-                                                    help='Location of the service\'s config ' + \
-                                                    'file (default: /etc/nvidia-air/agent.ini)',
-                                                    default='/etc/nvidia-air/agent.ini')
+        mock_parser.add_argument \
+            .assert_called_with('-c', '--config-file', default=default_config_file,
+                                help='Location of the service\'s config file. ' + \
+                                     'Normally this will be injected automatically by the Air platform ' + \
+                                     f'(default: {default_config_file})')
         self.assertEqual(res, 'foo')
 
     @patch('agent.executors')
