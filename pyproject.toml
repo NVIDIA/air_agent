@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "agent"
-version = "2.3.2"
+version = "3.0.2"
 license = "MIT"
 description = "The NVIDIA Air Agent is a systemd service that detects if a VM has been cloned."
 classifiers = ["Programming Language :: Python :: 3", "License :: OSI Approved :: MIT License", "Operating System :: OS Independent"]
