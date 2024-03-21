@@ -4,8 +4,8 @@
 """
 Unit tests for Agent module
 """
-#pylint: disable=unused-argument,missing-class-docstring,missing-function-docstring
-#pylint: disable=arguments-differ,no-self-use,too-many-public-methods,too-many-arguments
+# pylint: disable=unused-argument,missing-class-docstring,missing-function-docstring
+# pylint: disable=arguments-differ,no-self-use,too-many-public-methods,too-many-arguments
 
 import json
 import subprocess
@@ -22,6 +22,7 @@ import executors
 import platform_detect
 from agent import Agent
 from . import util
+
 
 class TestAgentIdentity(TestCase):
     def setUp(self):
@@ -42,14 +43,12 @@ class TestAgentIdentity(TestCase):
         mock_open.assert_called_with(f'{key_dir}uuid_123.txt')
         self.assertEqual(res, 'abc')
 
-    @patch('subprocess.run', side_effect=[True, True, True, subprocess.CalledProcessError(1, 'a'),
-                                          True])
+    @patch('subprocess.run', side_effect=[True, True, True, subprocess.CalledProcessError(1, 'a'), True])
     @patch('logging.debug')
     @patch('agent.parse_instructions')
     @patch('agent.fix_clock')
     @patch('agent.platform_detect.detect', return_value=(None, None))
-    def test_get_identity_failed_umount(self, mock_detect, mock_fix, mock_parse, mock_log,
-                                        mock_run):
+    def test_get_identity_failed_umount(self, mock_detect, mock_fix, mock_parse, mock_log, mock_run):
         agent_obj = Agent(self.config)
         res = agent_obj.get_identity()
         self.assertIsNone(res)
@@ -78,6 +77,7 @@ class TestAgentIdentity(TestCase):
         res = agent_obj.get_identity()
         self.assertIsNone(res)
         mock_log.assert_called_with('Failed to find identity file')
+
 
 class TestAgent(TestCase):
     @patch('agent.parse_instructions')
@@ -172,7 +172,6 @@ class TestAgent(TestCase):
         self.assertEqual(res, instructions)
         url = self.config['AIR_API'] + 'simulation-node/000-000/instructions/'
         mock_get.assert_called_with(url, timeout=10, verify=self.agent.verify_ssl)
-
 
     @patch('requests.get', side_effect=Exception)
     @patch('logging.error')
@@ -379,16 +378,18 @@ class TestAgent(TestCase):
     @patch('os.execv')
     @patch('agent.parse_instructions')
     @patch('agent.fix_clock')
-    def test_auto_update(self, mock_fix, mock_parse, mock_exec, mock_move, mock_ls, mock_cwd,
-                         mock_clone, mock_rm, mock_get):
-        mock_get.return_value.text = 'AGENT_VERSION = \'2.0.0\'\n'
+    def test_auto_update(
+        self, mock_fix, mock_parse, mock_exec, mock_move, mock_ls, mock_cwd, mock_clone, mock_rm, mock_get
+    ):
+        mock_get.return_value.text = "AGENT_VERSION = '2.0.0'\n"
         testagent = Agent(self.config)
         testagent.config['AUTO_UPDATE'] = 'True'
         testagent.auto_update()
         mock_get.assert_called_with(self.config['VERSION_URL'])
         mock_rm.assert_called_with('/tmp/air-agent')
-        mock_clone.assert_called_with(self.config['GIT_URL'], '/tmp/air-agent',
-                                      branch=self.config['GIT_BRANCH'])
+        mock_clone.assert_called_with(
+            self.config['GIT_URL'], '/tmp/air-agent', branch=self.config['GIT_BRANCH']
+        )
         mock_move.assert_called_with('/tmp/air-agent/test.py', '/tmp/foo/test.py')
         mock_exec.assert_called_with(sys.executable, ['python3'] + sys.argv)
 
@@ -399,7 +400,7 @@ class TestAgent(TestCase):
     @patch('logging.debug')
     @patch('agent.fix_clock')
     def test_auto_update_latest(self, mock_fix, mock_log, mock_parse, mock_clone, mock_get):
-        mock_get.return_value.text = 'AGENT_VERSION = \'1.4.3\'\n'
+        mock_get.return_value.text = "AGENT_VERSION = '1.4.3'\n"
         testagent = Agent(self.config)
         testagent.config['AUTO_UPDATE'] = 'True'
         testagent.auto_update()
@@ -429,16 +430,18 @@ class TestAgent(TestCase):
     @patch('os.execv')
     @patch('agent.parse_instructions')
     @patch('agent.fix_clock')
-    def test_auto_update_rm_safe(self, mock_fix, mock_parse, mock_exec, mock_move, mock_ls,
-                                 mock_cwd, mock_clone, mock_rm, mock_get):
-        mock_get.return_value.text = 'AGENT_VERSION = \'2.0.0\'\n'
+    def test_auto_update_rm_safe(
+        self, mock_fix, mock_parse, mock_exec, mock_move, mock_ls, mock_cwd, mock_clone, mock_rm, mock_get
+    ):
+        mock_get.return_value.text = "AGENT_VERSION = '2.0.0'\n"
         testagent = Agent(self.config)
         testagent.config['AUTO_UPDATE'] = 'True'
         testagent.auto_update()
         mock_get.assert_called_with(self.config['VERSION_URL'])
         mock_rm.assert_called_with('/tmp/air-agent')
-        mock_clone.assert_called_with(self.config['GIT_URL'], '/tmp/air-agent',
-                                      branch=self.config['GIT_BRANCH'])
+        mock_clone.assert_called_with(
+            self.config['GIT_URL'], '/tmp/air-agent', branch=self.config['GIT_BRANCH']
+        )
         mock_move.assert_called_with('/tmp/air-agent/test.py', '/tmp/foo/test.py')
         mock_exec.assert_called_with(sys.executable, ['python3'] + sys.argv)
 
@@ -453,9 +456,20 @@ class TestAgent(TestCase):
     @patch('agent.parse_instructions')
     @patch('logging.error')
     @patch('agent.fix_clock')
-    def test_auto_update_error(self, mock_fix, mock_log, mock_parse, mock_exec, mock_move, mock_ls,
-                               mock_cwd, mock_clone, mock_rm, mock_get):
-        mock_get.return_value.text = 'AGENT_VERSION = \'2.0.0\'\n'
+    def test_auto_update_error(
+        self,
+        mock_fix,
+        mock_log,
+        mock_parse,
+        mock_exec,
+        mock_move,
+        mock_ls,
+        mock_cwd,
+        mock_clone,
+        mock_rm,
+        mock_get,
+    ):
+        mock_get.return_value.text = "AGENT_VERSION = '2.0.0'\n"
         testagent = Agent(self.config)
         testagent.config['AUTO_UPDATE'] = 'True'
         testagent.auto_update()
@@ -487,6 +501,7 @@ class TestAgent(TestCase):
         self.agent.unlock()
         self.assertFalse(self.agent.lock.locked())
 
+
 class TestAgentFunctions(TestCase):
     class MockConfigParser(dict):
         def __init__(self):
@@ -506,24 +521,26 @@ class TestAgentFunctions(TestCase):
         mock_parser.parse_args.return_value = 'foo'
         res = agent.parse_args()
         year = datetime.now().year
-        mock_argparse.assert_called_with(description='Air Agent service ' + \
-                                         f'(NVIDIA © {year})')
-        mock_parser.add_argument \
-            .assert_called_with('-c', '--config-file', default=default_config_file,
-                                help='Location of the service\'s config file. ' + \
-                                     'Normally this will be injected automatically by the Air platform ' + \
-                                     f'(default: {default_config_file})')
+        mock_argparse.assert_called_with(description='Air Agent service ' + f'(NVIDIA © {year})')
+        mock_parser.add_argument.assert_called_with(
+            '-c',
+            '--config-file',
+            default=default_config_file,
+            help="Location of the service's config file. "
+            + 'Normally this will be injected automatically by the Air platform '
+            + f'(default: {default_config_file})',
+        )
         self.assertEqual(res, 'foo')
 
     @patch('agent.executors')
     @patch('agent.sleep')
-    @patch('agent.Agent.get_instructions', return_value=[{'data': 'foo', 'executor': 'shell',
-                                                          'monitor': None}])
+    @patch(
+        'agent.Agent.get_instructions', return_value=[{'data': 'foo', 'executor': 'shell', 'monitor': None}]
+    )
     @patch('threading.Thread')
     @patch('agent.Agent.auto_update')
     @patch('agent.fix_clock')
-    def test_start_daemon(self, mock_fix, mock_update, mock_threading, mock_parse, mock_sleep,
-                          mock_exec):
+    def test_start_daemon(self, mock_fix, mock_update, mock_threading, mock_parse, mock_sleep, mock_exec):
         mock_signal_thread = MagicMock()
         mock_clock_thread = MagicMock()
         mock_threading.side_effect = [mock_signal_thread, mock_clock_thread]
@@ -549,8 +566,7 @@ class TestAgentFunctions(TestCase):
     @patch('agent.parse_instructions')
     @patch('threading.Thread')
     @patch('agent.fix_clock')
-    def test_start_daemon_no_change(self, mock_fix, mock_threading, mock_parse, mock_sleep,
-                                    mock_exec):
+    def test_start_daemon_no_change(self, mock_fix, mock_threading, mock_parse, mock_sleep, mock_exec):
         Agent.get_identity = MagicMock(return_value='123-456')
         agent_obj = Agent(self.config)
         agent_obj.get_instructions = MagicMock()
@@ -561,12 +577,12 @@ class TestAgentFunctions(TestCase):
 
     @patch('agent.executors')
     @patch('agent.sleep')
-    @patch('agent.Agent.get_instructions', return_value=[{'data': 'foo', 'executor': 'shell',
-                                                          'monitor': None}])
+    @patch(
+        'agent.Agent.get_instructions', return_value=[{'data': 'foo', 'executor': 'shell', 'monitor': None}]
+    )
     @patch('threading.Thread')
     @patch('agent.fix_clock')
-    def test_start_daemon_command_failed(self, mock_fix, mock_threading, mock_parse, mock_sleep,
-                                         mock_exec):
+    def test_start_daemon_command_failed(self, mock_fix, mock_threading, mock_parse, mock_sleep, mock_exec):
         mock_exec.EXECUTOR_MAP = {'shell': MagicMock(return_value=False)}
         Agent.get_identity = MagicMock(return_value='123-456')
         agent_obj = Agent(self.config)
@@ -584,7 +600,7 @@ class TestAgentFunctions(TestCase):
         mock_agent = MagicMock()
         mock_agent.get_instructions.return_value = [
             {'executor': 'shell', 'data': 'foo', 'monitor': None},
-            {'executor': 'shell', 'data': 'bar', 'monitor': None}
+            {'executor': 'shell', 'data': 'bar', 'monitor': None},
         ]
         mock_agent.delete_instructions = MagicMock()
         mock_agent.identity = 'xzy'
@@ -604,8 +620,7 @@ class TestAgentFunctions(TestCase):
     def test_parse_instructions_unsupported(self, mock_log, mock_exec):
         mock_exec.EXECUTOR_MAP = {'shell': MagicMock(side_effect=[1, 2])}
         mock_agent = MagicMock()
-        mock_agent.get_instructions.return_value = [{'executor': 'test', 'data': 'foo',
-                                                     'monitor': None}]
+        mock_agent.get_instructions.return_value = [{'executor': 'test', 'data': 'foo', 'monitor': None}]
         agent.parse_instructions(mock_agent)
         mock_log.assert_called_with('Received unsupported executor test')
 
@@ -622,11 +637,14 @@ class TestAgentFunctions(TestCase):
 
     @patch('agent.sleep')
     def test_parse_instructions_failed(self, mock_sleep):
+        retries = 10
         mock_agent = MagicMock()
-        mock_agent.get_instructions.side_effect = [False, False]
-        res = agent.parse_instructions(mock_agent, attempt=3)
-        mock_sleep.assert_called_with(30)
-        self.assertEqual(mock_agent.get_instructions.call_count, 2)
+        mock_agent.get_instructions.return_value = False
+        res = agent.parse_instructions(mock_agent, attempt=1)
+        self.assertEqual(len(mock_sleep.mock_calls), retries)
+        self.assertEqual(mock_sleep.mock_calls[0], call(10))
+        self.assertEqual(mock_sleep.mock_calls[retries - 1], call(retries * 10))
+        self.assertEqual(mock_agent.get_instructions.call_count, retries + 1)
         self.assertFalse(res)
         mock_agent.lock.acquire.assert_called()
         mock_agent.unlock.assert_called()
@@ -637,15 +655,16 @@ class TestAgentFunctions(TestCase):
     def test_parse_instructions_cmd_failed(self, mock_sleep, mock_log, mock_exec):
         mock_exec.EXECUTOR_MAP = {'shell': MagicMock(side_effect=[False, False, True])}
         mock_agent = MagicMock()
-        mock_agent.get_instructions.return_value = [{'executor': 'shell', 'data': 'foo',
-                                                     'monitor': None}]
+        mock_agent.get_instructions.return_value = [{'executor': 'shell', 'data': 'foo', 'monitor': None}]
         mock_agent.get_identity = MagicMock(return_value='abc')
         agent.parse_instructions(mock_agent)
         assert_logs = MagicMock()
-        assert_logs.warning('Failed to execute all instructions on attempt #1. ' + \
-                            'Retrying in 10 seconds...')
-        assert_logs.warning('Failed to execute all instructions on attempt #2. ' + \
-                            'Retrying in 20 seconds...')
+        assert_logs.warning(
+            'Failed to execute all instructions on attempt #1. ' + 'Retrying in 10 seconds...'
+        )
+        assert_logs.warning(
+            'Failed to execute all instructions on attempt #2. ' + 'Retrying in 20 seconds...'
+        )
         self.assertEqual(mock_log.mock_calls, assert_logs.mock_calls)
         assert_sleep = MagicMock()
         assert_sleep(10)
@@ -661,8 +680,7 @@ class TestAgentFunctions(TestCase):
     def test_parse_instructions_all_cmd_failed(self, mock_sleep, mock_log, mock_exec):
         mock_exec.EXECUTOR_MAP = {'shell': MagicMock(return_value=False)}
         mock_agent = MagicMock()
-        mock_agent.get_instructions.return_value = [{'executor': 'shell', 'data': 'foo',
-                                                     'monitor': None}]
+        mock_agent.get_instructions.return_value = [{'executor': 'shell', 'data': 'foo', 'monitor': None}]
         mock_agent.get_identity = MagicMock(return_value='abc')
         agent.parse_instructions(mock_agent)
         assert_sleep = MagicMock()
@@ -683,12 +701,14 @@ class TestAgentFunctions(TestCase):
         monitor_str = '{"file": "/tmp/foo", "pattern": "bar"}'
         mock_exec.EXECUTOR_MAP = {'shell': MagicMock(side_effect=[1, 2])}
         mock_agent = MagicMock()
-        mock_agent.get_instructions.return_value = [{'executor': 'shell', 'data': 'foo',
-                                                     'monitor': monitor_str}]
+        mock_agent.get_instructions.return_value = [
+            {'executor': 'shell', 'data': 'foo', 'monitor': monitor_str}
+        ]
         mock_channel = MagicMock()
         agent.parse_instructions(mock_agent, channel=mock_channel)
-        mock_thread_class.assert_called_with(target=mock_agent.monitor, args=(mock_channel,),
-                                             kwargs=json.loads(monitor_str))
+        mock_thread_class.assert_called_with(
+            target=mock_agent.monitor, args=(mock_channel,), kwargs=json.loads(monitor_str)
+        )
         mock_thread.start.assert_called()
         mock_agent.lock.acquire.assert_called()
         mock_agent.unlock.assert_called()
@@ -716,9 +736,9 @@ class TestAgentFunctions(TestCase):
         agent.parse_instructions(mock_agent)
         mock_log.assert_called_with('Skipping init instructions due to missing os')
 
-
-    @patch('subprocess.check_output',
-           return_value=b'ntp.service\nfoo.service\nntp@mgmt.service\nchrony.service')
+    @patch(
+        'subprocess.check_output', return_value=b'ntp.service\nfoo.service\nntp@mgmt.service\nchrony.service'
+    )
     @patch('subprocess.call')
     def test_restart_ntp(self, mock_call, mock_check):
         mock_for_assert = MagicMock()
@@ -769,16 +789,19 @@ class TestAgentFunctions(TestCase):
     def test_check_devices_ls_failed(self, mock_log, mock_run, mock_mount, mock_exists):
         res = agent.check_devices(self.config)
         self.assertFalse(res)
-        mock_log.assert_called_with(f'Failed to find expected files on {self.config["key_device"]} ' + \
-                                    'filesystem - agent will not be started')
+        mock_log.assert_called_with(
+            f'Failed to find expected files on {self.config["key_device"]} '
+            + 'filesystem - agent will not be started'
+        )
 
     @patch('os.path.exists')
     @patch('subprocess.run')
     def test_mount_device(self, mock_run, mock_exists):
         res = agent.mount_device(self.config)
         self.assertTrue(res)
-        mock_run.assert_called_with(f'mount {self.config["key_device"]} {self.config["key_dir"]} 2>/dev/null',
-                                    shell=True)
+        mock_run.assert_called_with(
+            f'mount {self.config["key_device"]} {self.config["key_dir"]} 2>/dev/null', shell=True
+        )
 
     @patch('os.path.exists', return_value=False)
     @patch('os.makedirs')
@@ -795,18 +818,23 @@ class TestAgentFunctions(TestCase):
     def test_mount_device_directory_exists(self, mock_run, mock_exists):
         res = agent.mount_device(self.config)
         self.assertTrue(res)
-        mock_run.assert_has_calls([call(f'umount {self.config["key_dir"]} 2>/dev/null', shell=True),
-                                   call(f'mount {self.config["key_device"]} {self.config["key_dir"]} ' + \
-                                        '2>/dev/null', shell=True)])
+        mock_run.assert_has_calls(
+            [
+                call(f'umount {self.config["key_dir"]} 2>/dev/null', shell=True),
+                call(
+                    f'mount {self.config["key_device"]} {self.config["key_dir"]} ' + '2>/dev/null', shell=True
+                ),
+            ]
+        )
 
-    @patch('os.path.exists', return_value = False)
+    @patch('os.path.exists', return_value=False)
     @patch('os.makedirs', side_effect=Exception)
     @patch('logging.error')
     def test_mount_device_directory_create_failed(self, mock_log, mock_dir, mock_exists):
         res = agent.mount_device(self.config)
         self.assertFalse(res)
         mock_log.assert_called_with(f'Failed to create the {self.config["key_dir"]} directory')
-        
+
     @patch('os.path.exists')
     @patch('subprocess.run')
     @patch('logging.debug')
@@ -825,8 +853,10 @@ class TestAgentFunctions(TestCase):
         mock_run.side_effect = [cmd1, subprocess.CalledProcessError(1, 'a')]
         res = agent.mount_device(self.config)
         self.assertFalse(res)
-        mock_log.assert_called_with(f'Failed to mount {self.config["key_device"]} to ' + \
-                                    f'{self.config["key_dir"]}')
+        mock_log.assert_called_with(
+            f'Failed to mount {self.config["key_device"]} to ' + f'{self.config["key_dir"]}'
+        )
+
 
 class TestExecutors(TestCase):
     @patch('subprocess.run')
@@ -890,8 +920,9 @@ class TestExecutors(TestCase):
         data = '{"/tmp/foo.txt": "bar", "post_cmd": [cat /tmp/foo.txt"]}'
         res = executors.file(data)
         self.assertFalse(res)
-        mock_log.assert_called_with('Failed to decode instructions as JSON: ' + \
-                                    'Expecting value: line 1 column 38 (char 37)')
+        mock_log.assert_called_with(
+            'Failed to decode instructions as JSON: ' + 'Expecting value: line 1 column 38 (char 37)'
+        )
 
     @patch('executors.shell')
     def test_init(self, mock_shell):
@@ -901,9 +932,11 @@ class TestExecutors(TestCase):
     @patch('logging.error')
     def test_init_json_parse_failed(self, mock_log):
         res = executors.init('string')
-        mock_log.assert_called_with('Failed to decode init data as JSON: ' + \
-                                    'Expecting value: line 1 column 1 (char 0)')
+        mock_log.assert_called_with(
+            'Failed to decode init data as JSON: ' + 'Expecting value: line 1 column 1 (char 0)'
+        )
         self.assertFalse(res)
+
 
 class TestPlatformDetect(TestCase):
     @patch('subprocess.run')

@@ -2,6 +2,7 @@ __pycache__
 .DS_Store
 .coverage
 htmlcov/
+.idea/
 
 # The line below should only be present in the main-github branch
 ngci_build/

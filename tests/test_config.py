@@ -3,14 +3,15 @@
 """
 Unit tests for Config module
 """
-#pylint: disable=unused-argument,missing-class-docstring,missing-function-docstring,protected-access
-#pylint: disable=arguments-differ,no-self-use,too-many-public-methods,too-many-arguments
+# pylint: disable=unused-argument,missing-class-docstring,missing-function-docstring,protected-access
+# pylint: disable=arguments-differ,no-self-use,too-many-public-methods,too-many-arguments
 
 import tempfile
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
 import config
+
 
 class TestConfig(TestCase):
     def setUp(self):
@@ -43,11 +44,13 @@ class TestConfig(TestCase):
 
         self.config._init_logger()
         mock_logging.root.removeHandler(mock_handler)
-        mock_logging.basicConfig.assert_called_once_with(filename=log_file, level=level,
-                                                         format=self.log_format)
+        mock_logging.basicConfig.assert_called_once_with(
+            filename=log_file, level=level, format=self.log_format
+        )
 
     @patch('config.logging')
     def test_init_logger_default(self, mock_logging):
         self.config._init_logger()
-        mock_logging.basicConfig.assert_called_once_with(filename='/var/log/air-agent.log', level='INFO',
-                                                         format=self.log_format)
+        mock_logging.basicConfig.assert_called_once_with(
+            filename='/var/log/air-agent.log', level='INFO', format=self.log_format
+        )

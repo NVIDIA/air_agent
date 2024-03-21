@@ -32,10 +32,12 @@ import platform_detect
 from config import Config
 from version import AGENT_VERSION
 
+
 class Agent:
     """
     Agent daemon
     """
+
     def __init__(self, config):
         self.config = config
         self.config['AIR_API'] = self.config['AIR_API'].replace('cumulusnetworks.com', 'nvidia.com')
@@ -51,7 +53,7 @@ class Agent:
         self.os, self.release = platform_detect.detect()
 
     def unlock(self):
-        """ Unlocks the agent lock if locked """
+        """Unlocks the agent lock if locked"""
         try:
             self.lock.release()
         except RuntimeError:
@@ -109,8 +111,7 @@ class Agent:
         bool - True if the VM's identity is still the same
         """
         current_identity = self.get_identity()
-        logging.debug(f'Initialized identity: {self.identity}, ' + \
-                      f'Current identity: {current_identity}')
+        logging.debug(f'Initialized identity: {self.identity}, ' + f'Current identity: {current_identity}')
         return self.identity == current_identity
 
     def get_key(self, identity):
@@ -239,8 +240,9 @@ class Agent:
             logging.debug(traceback.format_exc())
             if attempt <= 3:
                 backoff = attempt * 10
-                logging.warning(f'signal_watch :: {err} (attempt #{attempt}). ' + \
-                                f'Trying again in {backoff} seconds...')
+                logging.warning(
+                    f'signal_watch :: {err} (attempt #{attempt}). ' + f'Trying again in {backoff} seconds...'
+                )
                 sleep(backoff)
                 self.signal_watch(attempt + 1, test=test)
             else:
@@ -300,14 +302,14 @@ class Agent:
         return (delta > timedelta(seconds=30)) or (-delta > timedelta(seconds=30))
 
     def auto_update(self):
-        """ Checks for and applies new agent updates if available """
+        """Checks for and applies new agent updates if available"""
         if not self.config.getboolean('AUTO_UPDATE'):
             logging.debug('Auto update is disabled')
             return
         logging.info('Checking for updates')
         try:
             res = requests.get(self.config['VERSION_URL'])
-            #pylint: disable=invalid-string-quote
+            # pylint: disable=invalid-string-quote
             latest = res.text.split(' = ')[1].strip().strip("'")
             if AGENT_VERSION != latest:
                 logging.debug('New version is available')
@@ -324,8 +326,7 @@ class Agent:
         except Exception:
             pass
         try:
-            git.Repo.clone_from(self.config['GIT_URL'], '/tmp/air-agent',
-                                branch=self.config['GIT_BRANCH'])
+            git.Repo.clone_from(self.config['GIT_URL'], '/tmp/air-agent', branch=self.config['GIT_BRANCH'])
             cwd = os.getcwd()
             for filename in os.listdir('/tmp/air-agent'):
                 if '.py' in filename:
@@ -351,6 +352,7 @@ class Agent:
             if kwargs.get('test'):
                 break
 
+
 def parse_args():
     """
     Helper function to provide command line arguments for the agent
@@ -358,12 +360,16 @@ def parse_args():
     default_config_file = '/mnt/air/agent.ini'
     year = datetime.now().year
     parser = argparse.ArgumentParser(description=f'Air Agent service (NVIDIA © {year})')
-    parser.add_argument('-c', '--config-file',
-                        help='Location of the service\'s config file. ' + \
-                             'Normally this will be injected automatically by the Air platform ' + \
-                             f'(default: {default_config_file})',
-                        default=default_config_file)
+    parser.add_argument(
+        '-c',
+        '--config-file',
+        help="Location of the service's config file. "
+        + 'Normally this will be injected automatically by the Air platform '
+        + f'(default: {default_config_file})',
+        default=default_config_file,
+    )
     return parser.parse_args()
+
 
 def parse_instructions(agent, attempt=1, channel=None, lock=True):
     """
@@ -385,9 +391,10 @@ def parse_instructions(agent, attempt=1, channel=None, lock=True):
         agent.identity = agent.get_identity()
         agent.unlock()
         return True
-    if instructions is False and attempt <= 3:
-        logging.warning(f'Failed to fetch instructions on attempt #{attempt}.' + \
-                        f'Retrying in {backoff} seconds...')
+    if instructions is False and attempt <= 10:
+        logging.warning(
+            f'Failed to fetch instructions on attempt #{attempt}. Retrying in {backoff} seconds...'
+        )
         sleep(backoff)
         return parse_instructions(agent, attempt + 1, channel, lock=False)
     if instructions is False:
@@ -401,8 +408,9 @@ def parse_instructions(agent, attempt=1, channel=None, lock=True):
             continue
         if instruction.get('monitor'):
             agent.monitoring = True
-            threading.Thread(target=agent.monitor, args=(channel,),
-                             kwargs=json.loads(instruction['monitor'])).start()
+            threading.Thread(
+                target=agent.monitor, args=(channel,), kwargs=json.loads(instruction['monitor'])
+            ).start()
         if executor in executors.EXECUTOR_MAP.keys():
             results.append(executors.EXECUTOR_MAP[executor](instruction['data']))
         else:
@@ -415,8 +423,10 @@ def parse_instructions(agent, attempt=1, channel=None, lock=True):
         agent.unlock()
         return True
     if results and attempt <= 3:
-        logging.warning(f'Failed to execute all instructions on attempt #{attempt}. ' + \
-                        f'Retrying in {backoff} seconds...')
+        logging.warning(
+            f'Failed to execute all instructions on attempt #{attempt}. '
+            + f'Retrying in {backoff} seconds...'
+        )
         sleep(backoff)
         return parse_instructions(agent, attempt + 1, channel, lock=False)
     if results:
@@ -424,18 +434,19 @@ def parse_instructions(agent, attempt=1, channel=None, lock=True):
     agent.unlock()
     return False
 
+
 def restart_ntp():
     """
     Restarts any running ntpd or chrony service that might be running. Includes support for
     services running in a VRF.
     """
-    services = subprocess.check_output('systemctl list-units -t service --plain --no-legend',
-                                       shell=True)
+    services = subprocess.check_output('systemctl list-units -t service --plain --no-legend', shell=True)
     for line in services.decode('utf-8').split('\n'):
         service = line.split(' ')[0]
         if re.match(r'(ntp|chrony).*\.service', service):
             logging.info(f'Restarting {service}')
             subprocess.call(f'systemctl restart {service}', shell=True)
+
 
 def fix_clock():
     """
@@ -444,11 +455,12 @@ def fix_clock():
     """
     try:
         logging.info('Syncing clock from hypervisor')
-        subprocess.run('hwclock -s', shell=True) # sync from hardware
+        subprocess.run('hwclock -s', shell=True)  # sync from hardware
         restart_ntp()
     except:
         logging.debug(traceback.format_exc())
         logging.error('Failed to fix clock')
+
 
 def start_daemon(agent, test=False):
     """
@@ -460,7 +472,7 @@ def start_daemon(agent, test=False):
     [test] (bool) - Used in unit testing to avoid infinite loop
     """
     threading.Thread(target=agent.clock_watch).start()
-    parse_instructions(agent) # do an initial check for instructions
+    parse_instructions(agent)  # do an initial check for instructions
     threading.Thread(target=agent.signal_watch).start()
     while True:
         same_id = agent.check_identity()
@@ -473,6 +485,7 @@ def start_daemon(agent, test=False):
         sleep(agent.config.getint('CHECK_INTERVAL'))
         if test:
             break
+
 
 def check_devices(config):
     """
@@ -492,6 +505,7 @@ def check_devices(config):
         logging.debug(traceback.format_exc())
         return False
     return True
+
 
 def mount_device(config):
     """
@@ -521,11 +535,12 @@ def mount_device(config):
         return False
     return True
 
+
 if __name__ == '__main__':
     ARGS = parse_args()
     CONFIG = Config(ARGS.config_file)
     if check_devices(CONFIG):
-        CONFIG = Config(ARGS.config_file) # reload config in case key_dir was remounted
+        CONFIG = Config(ARGS.config_file)  # reload config in case key_dir was remounted
         AGENT = Agent(CONFIG)
         logging.info(f'Starting Air Agent daemon v{AGENT_VERSION}')
         start_daemon(AGENT)

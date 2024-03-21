@@ -9,6 +9,7 @@ import logging
 import subprocess
 import traceback
 
+
 def detect():
     """
     Detect the current platform

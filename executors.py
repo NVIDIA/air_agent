@@ -10,6 +10,7 @@ import logging
 import subprocess
 import traceback
 
+
 def shell(instructions):
     """
     Executor for shell commands
@@ -29,6 +30,7 @@ def shell(instructions):
             logging.debug(traceback.format_exc())
             return False
     return True
+
 
 def file(instructions):
     """
@@ -72,6 +74,7 @@ def file(instructions):
             success = False
     return success
 
+
 def init(data):
     """
     Executor for init instructions
@@ -94,5 +97,6 @@ def init(data):
         success = shell(f'hostnamectl set-hostname {json_data["hostname"]}')
 
     return success
+
 
 EXECUTOR_MAP = {'file': file, 'shell': shell, 'init': init}
