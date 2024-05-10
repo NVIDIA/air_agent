@@ -4,17 +4,31 @@ The NVIDIA Air Agent is a systemd service that detects if a VM has been cloned. 
 
 ## Pre-requisites
 
-Make sure `python3` and `pip3` are installed.
+### Ubuntu 18.04/20.04/22.04
 
-### Ubuntu 18.04 (python 3.6)
+Make sure `python3` and either `python3-pip` are installed:
 
 ```
 sudo apt update && sudo apt install -y python3 python3-pip
 ```
 
+Install the dependencies via pip:
+
+```
+python3 -m pip install .
+```
+
+### Ubuntu 24.04
+
+Make sure `python3`, `python3-cryptography`, `python3-git`, `python3-requests` and `util-linux-extra` (required for use of the `hwclock` command by the agent) are installed:
+
+```
+sudo apt update && sudo apt install -y python3 python3-cryptography python3-git python3-requests util-linux-extra
+```
+
 ## Installing
 
-Make sure `python3` and `pip3` are installed, and then run:
+Once the proper dependencies are installed, run the install script:
 
 `sudo ./install.sh`
 

@@ -35,12 +35,6 @@ install_service() {
 }
 
 echo "####################################"
-echo "# Installing pip requirements      #"
-echo "####################################"
-python3 -m pip install .
-echo "Done!"
-
-echo "####################################"
 echo "# Installing air-agent             #"
 echo "####################################"
 mkdir -p /usr/local/lib/air-agent

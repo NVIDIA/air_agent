@@ -8,8 +8,8 @@ User=root
 Group=root
 WorkingDirectory=/usr/local/lib/air-agent
 ExecStart=/usr/bin/python3 /usr/local/lib/air-agent/agent.py
-StandardOutput=syslog
-StandardError=syslog
+StandardOutput=journal
+StandardError=journal
 Restart=on-failure
 RestartSec=3
 
