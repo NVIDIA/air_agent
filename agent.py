@@ -19,18 +19,26 @@ import sys
 import threading
 import time
 import traceback
+import typing
 from datetime import datetime, timedelta
 from pathlib import Path
 from time import sleep
 
-from cryptography.fernet import Fernet
 import git
 import requests
+from cryptography.fernet import Fernet
 
 import executors
 import platform_detect
 from config import Config
 from version import AGENT_VERSION
+
+KEY_DEVICE_VOLUME_ID_CONFIG_VAR = 'KEY_DEVICE_VOLUME_ID'
+KEY_DEVICE_VOLUME_ID_DEFAULT = 'airagent'
+KEY_DEVICE_FALLBACK_PATH_CONFIG_VAR = 'KEY_DEVICE'
+KEY_DEVICE_FALLBACK_PATH_DEFAULT = '/dev/vdb'
+KEY_DIR_CONFIG_VAR = 'KEY_DIR'
+KEY_DIR_DEFAULT = '/mnt/air/'
 
 
 class Agent:
@@ -88,12 +96,13 @@ class Agent:
         Returns:
         str - The VM UUID (ex: 'abcdefab-0000-1111-2222-123456789012')
         """
-        key_dir = self.config['KEY_DIR']
+        key_dir = get_key_directory_path(self.config)
+
         if not mount_device(self.config):
             logging.error(f'Failed to refresh {key_dir}')
             logging.debug(traceback.format_exc())
             return None
-        uuid_path = glob.glob(f'{key_dir}uuid*.txt')
+        uuid_path = glob.glob(str(key_dir / 'uuid*.txt'))
         if uuid_path:
             uuid_path = uuid_path[0]
             logging.debug(f'Checking for identity at {uuid_path}')
@@ -127,11 +136,11 @@ class Agent:
         """
         logging.debug(f'Getting key for {identity}')
         filename = identity.split('-')[0]
-        key_dir = self.config['KEY_DIR']
-        key_path = f'{key_dir}{filename}.txt'
+        key_dir = get_key_directory_path(self.config)
+        key_path = key_dir / '.'.join((filename, 'txt'))
         logging.debug(f'Checking for key at {key_path}')
-        if Path(key_path).is_file():
-            with open(key_path) as key_file:
+        if key_path.is_file():
+            with key_path.open() as key_file:
                 return key_file.read().strip()
         else:
             logging.error(f'Failed to find decryption key for {identity}')
@@ -357,7 +366,7 @@ def parse_args():
     """
     Helper function to provide command line arguments for the agent
     """
-    default_config_file = '/mnt/air/agent.ini'
+    default_config_file = str(Path(KEY_DIR_DEFAULT, 'agent.ini'))
     year = datetime.now().year
     parser = argparse.ArgumentParser(description=f'Air Agent service (NVIDIA © {year})')
     parser.add_argument(
@@ -487,37 +496,78 @@ def start_daemon(agent, test=False):
             break
 
 
+def get_key_device_path(config: Config) -> Path:
+    """
+    Resolves path to the key device by looking it up by volume ID and falling back to a default path
+    """
+    volume_id = typing.cast(str, config.get(KEY_DEVICE_VOLUME_ID_CONFIG_VAR, KEY_DEVICE_VOLUME_ID_DEFAULT))
+    key_device_path_fallback = typing.cast(
+        str, config.get(KEY_DEVICE_FALLBACK_PATH_CONFIG_VAR, KEY_DEVICE_FALLBACK_PATH_DEFAULT)
+    )
+
+    try:
+        return Path(
+            subprocess.run(
+                ('blkid', '--label', volume_id), text=True, check=True, capture_output=True
+            ).stdout.strip()
+        )
+    except subprocess.CalledProcessError:
+        logging.warning(
+            'Key device with ID `%s` was not found, falling back to `%s`', volume_id, key_device_path_fallback
+        )
+    except Exception as e:
+        logging.warning(
+            'An unexpected error has occurred while looking up a key device by ID `%s`, falling back to `%s`: %s',
+            volume_id,
+            key_device_path_fallback,
+            e,
+        )
+
+    return Path(key_device_path_fallback)
+
+
+def get_key_directory_path(config: Config) -> Path:
+    """
+    Resolves key device mount path from given config with a fallback to a default path
+    """
+    return Path(typing.cast(str, config.get(KEY_DIR_CONFIG_VAR, KEY_DIR_DEFAULT)))
+
+
 def check_devices(config):
     """
-    Tests for the presence of the /dev/vdb device. If it exists, allow the agent to continue. If it does not
+    Tests for the presence of the key device. If it exists, allow the agent to continue. If it does not
     exist, then exit with a success code so the service doesn't fail, but do not start the daemon thread
     """
-    device = config.get('KEY_DEVICE', '/dev/vdb')
-    if not os.path.exists(device):
+    device = get_key_device_path(config)
+    key_dir = get_key_directory_path(config)
+
+    if not device.exists():
         logging.info(f'{device} does not exist - agent will not be started')
         return False
     if not mount_device(config):
         return False
     try:
-        subprocess.run('ls /mnt/air/uuid*', shell=True)
+        subprocess.run(f'ls {key_dir / "uuid*"}', shell=True)
     except:
         logging.info(f'Failed to find expected files on {device} filesystem - agent will not be started')
         logging.debug(traceback.format_exc())
         return False
+
     return True
 
 
 def mount_device(config):
     """
-    Mounts /dev/vdb to the directory specified in the config file. Unmounts the directory before attempting
+    Mounts key device to the directory specified in the config file. Unmounts the directory before attempting
     the mount to refresh the contents in the event this node was cloned.
     """
-    device = config.get('KEY_DEVICE', '/dev/vdb')
-    key_dir = config.get('KEY_DIR', '/mnt/air')
-    if not os.path.exists(key_dir):
+    device = get_key_device_path(config)
+    key_dir = get_key_directory_path(config)
+
+    if not key_dir.exists():
         logging.debug(f'{key_dir} does not exist, creating')
         try:
-            os.makedirs(key_dir)
+            os.makedirs(str(key_dir))
         except:
             logging.error(f'Failed to create the {key_dir} directory')
             logging.debug(traceback.format_exc())
@@ -533,6 +583,7 @@ def mount_device(config):
         logging.error(f'Failed to mount {device} to {key_dir}')
         logging.debug(traceback.format_exc())
         return False
+
     return True
 
 

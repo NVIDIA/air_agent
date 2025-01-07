@@ -7,13 +7,15 @@ Unit tests for Agent module
 # pylint: disable=unused-argument,missing-class-docstring,missing-function-docstring
 # pylint: disable=arguments-differ,no-self-use,too-many-public-methods,too-many-arguments
 
+import builtins
 import json
 import subprocess
 import sys
 import threading
 from datetime import datetime
+from pathlib import Path
 from unittest import TestCase
-from unittest.mock import call, MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 from cryptography.fernet import Fernet
 
@@ -21,6 +23,7 @@ import agent
 import executors
 import platform_detect
 from agent import Agent
+
 from . import util
 
 
@@ -29,54 +32,54 @@ class TestAgentIdentity(TestCase):
         self.config = util.load_config()
 
     @patch('subprocess.run')
-    @patch('glob.glob', return_value=['./uuid_123.txt'])
-    @patch('builtins.open')
     @patch('agent.parse_instructions')
     @patch('agent.fix_clock')
-    def test_get_identity(self, mock_fix, mock_parse, mock_open, mock_glob, mock_run):
-        mock_file = MagicMock()
-        mock_file.read = MagicMock(return_value='ABC\n')
-        mock_open.return_value.__enter__.return_value = mock_file
-        agent_obj = Agent(self.config)
-        res = agent_obj.get_identity()
-        key_dir = self.config['KEY_DIR']
-        mock_open.assert_called_with(f'{key_dir}uuid_123.txt')
-        self.assertEqual(res, 'abc')
+    def test_get_identity(self, *args):
+        with patch.object(
+            agent, agent.mount_device.__name__, return_value=True
+        ) as mock_mount_device, patch.object(
+            agent.glob, agent.glob.glob.__name__, return_value=['/mnt/test/uuid_123.txt']
+        ) as mock_glob, patch.object(
+            agent, agent.get_key_directory_path.__name__, return_value=Path('/mnt/test/')
+        ) as mock_get_key_directory_path, patch.object(
+            builtins,
+            builtins.open.__name__,
+            return_value=MagicMock(
+                __enter__=MagicMock(return_value=MagicMock(read=MagicMock(return_value='ABC\n')))
+            ),
+        ) as mock_open:
+            agent_instance = Agent(self.config)
 
-    @patch('subprocess.run', side_effect=[True, True, True, subprocess.CalledProcessError(1, 'a'), True])
-    @patch('logging.debug')
-    @patch('agent.parse_instructions')
-    @patch('agent.fix_clock')
-    @patch('agent.platform_detect.detect', return_value=(None, None))
-    def test_get_identity_failed_umount(self, mock_detect, mock_fix, mock_parse, mock_log, mock_run):
-        agent_obj = Agent(self.config)
-        res = agent_obj.get_identity()
-        self.assertIsNone(res)
-        key_dir = self.config['KEY_DIR']
-        mock_log.assert_called_with(f'{key_dir} exists but is not mounted')
-
-    @patch('subprocess.run', side_effect=[True, True, True, subprocess.CalledProcessError(1, 'a')])
-    @patch('logging.error')
-    @patch('agent.parse_instructions')
-    @patch('agent.fix_clock')
-    @patch('agent.platform_detect.detect', return_value=(None, None))
-    def test_get_identity_failed_mount(self, mock_detect, mock_fix, mock_parse, mock_log, mock_run):
-        agent_obj = Agent(self.config)
-        res = agent_obj.get_identity()
-        self.assertIsNone(res)
-        key_dir = self.config['KEY_DIR']
-        mock_log.assert_called_with(f'Failed to refresh {key_dir}')
+            mock_get_key_directory_path.assert_called_once_with(agent_instance.config)
+            mock_mount_device.assert_called_once_with(agent_instance.config)
+            mock_glob.assert_called_once_with('/mnt/test/uuid*.txt')
+            mock_open.assert_called_once_with('/mnt/test/uuid_123.txt')
+            mock_open.return_value.__enter__.assert_called_once_with()
+            self.assertEqual(agent_instance.identity, 'abc')
+            mock_open.return_value.__exit__.assert_called_once()
 
     @patch('subprocess.run')
-    @patch('glob.glob', return_value=[])
-    @patch('logging.error')
     @patch('agent.parse_instructions')
     @patch('agent.fix_clock')
-    def test_get_identity_no_file(self, mock_fix, mock_parse, mock_log, mock_glob, mock_run):
-        agent_obj = Agent(self.config)
-        res = agent_obj.get_identity()
-        self.assertIsNone(res)
-        mock_log.assert_called_with('Failed to find identity file')
+    def test_get_identity_failed_mount(self, *args):
+        with patch.object(agent, agent.mount_device.__name__, return_value=False), patch.object(
+            agent, agent.get_key_directory_path.__name__
+        ):
+            agent_instance = Agent(self.config)
+
+            self.assertIsNone(agent_instance.identity)
+
+    @patch('subprocess.run')
+    @patch('agent.parse_instructions')
+    @patch('agent.fix_clock')
+    def test_get_identity_no_file(self, *args):
+        with patch.object(agent, agent.mount_device.__name__, return_value=True), patch.object(
+            agent.glob, agent.glob.glob.__name__, return_value=[]
+        ), patch.object(agent, agent.get_key_directory_path.__name__):
+            agent_instance = Agent(self.config)
+
+            self.assertIsNone(agent_instance.identity)
+
 
 
 class TestAgent(TestCase):
@@ -133,23 +136,41 @@ class TestAgent(TestCase):
         res = self.agent.check_identity()
         self.assertFalse(res)
 
-    @patch('agent.Path')
-    @patch('builtins.open')
-    def test_get_key(self, mock_open, mock_path):
-        mock_path.is_file = MagicMock(return_value=True)
-        mock_file = MagicMock()
-        mock_file.read = MagicMock(return_value='foo\n')
-        mock_open.return_value.__enter__.return_value = mock_file
-        res = self.agent.get_key('123-456')
-        self.assertEqual(res, 'foo')
+    def test_get_key(self):
+        with patch.object(
+            agent,
+            agent.get_key_directory_path.__name__,
+            return_value=MagicMock(
+                spec=Path,
+                __truediv__=MagicMock(
+                    return_value=MagicMock(
+                        is_file=MagicMock(return_value=True),
+                        open=MagicMock(
+                            return_value=MagicMock(
+                                __enter__=MagicMock(
+                                    return_value=MagicMock(read=MagicMock(return_value='foo\n'))
+                                )
+                            )
+                        ),
+                    )
+                ),
+            ),
+        ):
+            self.assertEqual(self.agent.get_key('123-456'), 'foo')
 
-    @patch('agent.Path')
     @patch('logging.error')
-    def test_get_key_failed(self, mock_log, mock_path):
-        mock_path.return_value.is_file = MagicMock(return_value=False)
-        res = self.agent.get_key('123-456')
-        self.assertIsNone(res)
-        mock_log.assert_called_with('Failed to find decryption key for 123-456')
+    def test_get_key_failed(self, mock_log):
+        with patch.object(
+            agent,
+            agent.get_key_directory_path.__name__,
+            return_value=MagicMock(
+                spec=Path,
+                __truediv__=MagicMock(return_value=MagicMock(is_file=MagicMock(return_value=False))),
+            ),
+        ):
+            res = self.agent.get_key('123-456')
+            self.assertIsNone(res)
+            mock_log.assert_called_with('Failed to find decryption key for 123-456')
 
     def test_decrypt_instructions(self):
         key = Fernet.generate_key()
@@ -763,99 +784,198 @@ class TestAgentFunctions(TestCase):
         agent.fix_clock()
         mock_log.assert_called_with('Failed to fix clock')
 
-    @patch('os.path.exists')
+    def test_check_devices(self):
+        with patch.object(
+            agent,
+            agent.get_key_device_path.__name__,
+            return_value=MagicMock(spec=Path, exists=MagicMock(return_value=True)),
+        ), patch.object(
+            agent, agent.get_key_directory_path.__name__, return_value=Path('/mnt/test/')
+        ), patch.object(subprocess, subprocess.run.__name__) as mock_subprocess_run, patch.object(
+            agent, agent.mount_device.__name__, return_value=True
+        ):
+            res = agent.check_devices(self.config)
+            self.assertTrue(res)
+            mock_subprocess_run.assert_called_once_with('ls /mnt/test/uuid*', shell=True)
+
+    def test_check_devices_path_does_not_exist(self):
+        with patch.object(
+            agent,
+            agent.get_key_device_path.__name__,
+            return_value=MagicMock(spec=Path, exists=MagicMock(return_value=False)),
+        ):
+            self.assertFalse(agent.check_devices(self.config))
+
+    def test_check_devices_mount_failed(self):
+        with patch.object(
+            agent,
+            agent.get_key_device_path.__name__,
+            return_value=MagicMock(spec=Path, exists=MagicMock(return_value=True)),
+        ), patch.object(
+            agent, agent.get_key_directory_path.__name__, return_value=Path('/mnt/test/')
+        ), patch.object(agent, agent.mount_device.__name__, return_value=False):
+            self.assertFalse(agent.check_devices(self.config))
+
+    def test_check_devices_ls_failed(self):
+        with patch.object(
+            agent,
+            agent.get_key_device_path.__name__,
+            return_value=MagicMock(spec=Path, exists=MagicMock(return_value=True)),
+        ), patch.object(
+            agent, agent.get_key_directory_path.__name__, return_value=Path('/mnt/test/')
+        ), patch.object(subprocess, subprocess.run.__name__, side_effect=Exception), patch.object(
+            agent, agent.mount_device.__name__, return_value=True
+        ):
+            self.assertFalse(agent.check_devices(self.config))
+
     @patch('subprocess.run')
-    def test_check_devices(self, mock_run, mock_exists):
-        res = agent.check_devices(self.config)
-        self.assertTrue(res)
+    def test_mount_device(self, mock_run):
+        with patch.object(
+            agent, agent.get_key_device_path.__name__, return_value=Path('/dev/foo')
+        ) as mock_get_key_device_path, patch.object(
+            agent,
+            agent.get_key_directory_path.__name__,
+            return_value=MagicMock(
+                spec=Path, exists=MagicMock(return_value=True), __str__=MagicMock(return_value='/mnt/bar/')
+            ),
+        ) as mock_get_key_directory_path:
+            res = agent.mount_device(self.config)
 
-    @patch('os.path.exists', return_value=False)
-    @patch('logging.info')
-    def test_check_devices_path_does_not_exist(self, mock_log, mock_exists):
-        res = agent.check_devices(self.config)
-        self.assertFalse(res)
-        mock_log.assert_called_with(f'{self.config["key_device"]} does not exist - agent will not be started')
+            mock_get_key_device_path.assert_called_once_with(self.config)
+            mock_get_key_directory_path.assert_called_once_with(self.config)
+            mock_run.assert_called_with('mount /dev/foo /mnt/bar/ 2>/dev/null', shell=True)
+            self.assertTrue(res)
 
-    @patch('os.path.exists')
-    @patch('agent.mount_device', return_value=False)
-    def test_check_devices_mount_failed(self, mock_mount, mock_exists):
-        res = agent.check_devices(self.config)
-        self.assertFalse(res)
-
-    @patch('os.path.exists')
-    @patch('agent.mount_device')
-    @patch('subprocess.run', side_effect=Exception)
-    @patch('logging.info')
-    def test_check_devices_ls_failed(self, mock_log, mock_run, mock_mount, mock_exists):
-        res = agent.check_devices(self.config)
-        self.assertFalse(res)
-        mock_log.assert_called_with(
-            f'Failed to find expected files on {self.config["key_device"]} '
-            + 'filesystem - agent will not be started'
-        )
-
-    @patch('os.path.exists')
-    @patch('subprocess.run')
-    def test_mount_device(self, mock_run, mock_exists):
-        res = agent.mount_device(self.config)
-        self.assertTrue(res)
-        mock_run.assert_called_with(
-            f'mount {self.config["key_device"]} {self.config["key_dir"]} 2>/dev/null', shell=True
-        )
-
-    @patch('os.path.exists', return_value=False)
     @patch('os.makedirs')
     @patch('subprocess.run')
     @patch('logging.debug')
-    def test_mount_device_directory_does_not_exist(self, mock_log, mock_run, mock_dir, mock_exists):
-        res = agent.mount_device(self.config)
-        self.assertTrue(res)
-        mock_log.assert_called_with(f'{self.config["key_dir"]} does not exist, creating')
-        mock_dir.assert_called_with(self.config['key_dir'])
+    def test_mount_device_directory_does_not_exist(self, mock_log, mock_run, mock_dir):
+        with patch.object(
+            agent, agent.get_key_device_path.__name__, return_value=Path('/dev/foo')
+        ), patch.object(
+            agent,
+            agent.get_key_directory_path.__name__,
+            return_value=MagicMock(
+                spec=Path, exists=MagicMock(return_value=False), __str__=MagicMock(return_value='/mnt/bar/')
+            ),
+        ):
+            res = agent.mount_device(self.config)
+            self.assertTrue(res)
+            mock_log.assert_called_with('/mnt/bar/ does not exist, creating')
+            mock_dir.assert_called_with('/mnt/bar/')
+            mock_run.assert_called_with('mount /dev/foo /mnt/bar/ 2>/dev/null', shell=True)
 
-    @patch('os.path.exists')
     @patch('subprocess.run')
-    def test_mount_device_directory_exists(self, mock_run, mock_exists):
-        res = agent.mount_device(self.config)
-        self.assertTrue(res)
-        mock_run.assert_has_calls(
-            [
-                call(f'umount {self.config["key_dir"]} 2>/dev/null', shell=True),
-                call(
-                    f'mount {self.config["key_device"]} {self.config["key_dir"]} ' + '2>/dev/null', shell=True
-                ),
-            ]
-        )
+    def test_mount_device_directory_exists(self, mock_run):
+        with patch.object(
+            agent, agent.get_key_device_path.__name__, return_value=Path('/dev/foo')
+        ), patch.object(
+            agent,
+            agent.get_key_directory_path.__name__,
+            return_value=MagicMock(
+                spec=Path, exists=MagicMock(return_value=True), __str__=MagicMock(return_value='/mnt/bar/')
+            ),
+        ):
+            res = agent.mount_device(self.config)
+            self.assertTrue(res)
+            mock_run.assert_has_calls(
+                [
+                    call('umount /mnt/bar/ 2>/dev/null', shell=True),
+                    call('mount /dev/foo /mnt/bar/ 2>/dev/null', shell=True),
+                ]
+            )
 
-    @patch('os.path.exists', return_value=False)
     @patch('os.makedirs', side_effect=Exception)
     @patch('logging.error')
-    def test_mount_device_directory_create_failed(self, mock_log, mock_dir, mock_exists):
-        res = agent.mount_device(self.config)
-        self.assertFalse(res)
-        mock_log.assert_called_with(f'Failed to create the {self.config["key_dir"]} directory')
+    def test_mount_device_directory_create_failed(self, mock_log, mock_dir):
+        with patch.object(agent, agent.get_key_device_path.__name__), patch.object(
+            agent,
+            agent.get_key_directory_path.__name__,
+            return_value=MagicMock(
+                spec=Path, exists=MagicMock(return_value=False), __str__=MagicMock(return_value='/mnt/bar/')
+            ),
+        ):
+            res = agent.mount_device(self.config)
+            self.assertFalse(res)
+            mock_log.assert_called_with('Failed to create the /mnt/bar/ directory')
 
-    @patch('os.path.exists')
     @patch('subprocess.run')
     @patch('logging.debug')
-    def test_mount_device_unmount_failed(self, mock_log, mock_run, mock_exists):
-        cmd2 = MagicMock()
-        mock_run.side_effect = [subprocess.CalledProcessError(1, 'a'), cmd2]
-        res = agent.mount_device(self.config)
-        self.assertTrue(res)
-        mock_log.assert_called_with(f'{self.config["key_dir"]} exists but is not mounted')
+    def test_mount_device_unmount_failed(self, mock_log, mock_run):
+        with patch.object(agent, agent.get_key_device_path.__name__), patch.object(
+            agent,
+            agent.get_key_directory_path.__name__,
+            return_value=MagicMock(
+                spec=Path, exists=MagicMock(return_value=True), __str__=MagicMock(return_value='/mnt/bar/')
+            ),
+        ):
+            cmd2 = MagicMock()
+            mock_run.side_effect = [subprocess.CalledProcessError(1, 'a'), cmd2]
+            res = agent.mount_device(self.config)
+            self.assertTrue(res)
+            mock_log.assert_called_with('/mnt/bar/ exists but is not mounted')
 
-    @patch('os.path.exists')
     @patch('subprocess.run')
     @patch('logging.error')
-    def test_mount_device_mount_failed(self, mock_log, mock_run, mock_exists):
-        cmd1 = MagicMock()
-        mock_run.side_effect = [cmd1, subprocess.CalledProcessError(1, 'a')]
-        res = agent.mount_device(self.config)
-        self.assertFalse(res)
-        mock_log.assert_called_with(
-            f'Failed to mount {self.config["key_device"]} to ' + f'{self.config["key_dir"]}'
-        )
+    def test_mount_device_mount_failed(self, mock_log, mock_run):
+        with patch.object(
+            agent, agent.get_key_device_path.__name__, return_value=Path('/dev/foo')
+        ), patch.object(
+            agent,
+            agent.get_key_directory_path.__name__,
+            return_value=MagicMock(
+                spec=Path, exists=MagicMock(return_value=True), __str__=MagicMock(return_value='/mnt/bar/')
+            ),
+        ):
+            cmd1 = MagicMock()
+            mock_run.side_effect = [cmd1, subprocess.CalledProcessError(1, 'a')]
+            res = agent.mount_device(self.config)
+            self.assertFalse(res)
+            mock_log.assert_called_with('Failed to mount /dev/foo to /mnt/bar/')
+
+    def test_get_key_device_path(self):
+        with patch.object(
+            subprocess, subprocess.run.__name__, return_value=MagicMock(stdout='/dev/test2\n')
+        ) as mock_subprocess:
+            return_value = agent.get_key_device_path(self.config)
+
+            mock_subprocess.assert_called_once_with(
+                ('blkid', '--label', 'testid'), text=True, check=True, capture_output=True
+            )
+            self.assertEqual(return_value, Path('/dev/test2'))
+
+    def test_get_key_device_path_default_volume_id(self):
+        with patch.object(
+            subprocess, subprocess.run.__name__, return_value=MagicMock(stdout='/dev/test2\n')
+        ) as mock_subprocess:
+            del self.config['KEY_DEVICE_VOLUME_ID']
+            return_value = agent.get_key_device_path(self.config)
+
+            mock_subprocess.assert_called_once_with(
+                ('blkid', '--label', 'airagent'), text=True, check=True, capture_output=True
+            )
+            self.assertEqual(return_value, Path('/dev/test2'))
+
+    def test_get_key_device_path_command_errors(self):
+        for exception in (subprocess.CalledProcessError, Exception):
+            with self.subTest(exception=exception), patch.object(
+                subprocess, subprocess.run.__name__, return_value=exception
+            ):
+                return_value = agent.get_key_device_path(self.config)
+                self.assertEqual(return_value, Path('/dev/test'))
+
+    def test_get_key_device_path_fallback(self):
+        with patch.object(subprocess, subprocess.run.__name__, return_value=Exception):
+            del self.config['KEY_DEVICE']
+            return_value = agent.get_key_device_path(self.config)
+            self.assertEqual(return_value, Path('/dev/vdb'))
+
+    def test_get_key_directory_path(self):
+        self.assertEqual(agent.get_key_directory_path(self.config), Path('/mnt/test/'))
+
+    def test_get_key_directory_path_override(self):
+        del self.config['KEY_DIR']
+        self.assertEqual(agent.get_key_directory_path(self.config), Path('/mnt/air/'))
 
 
 class TestExecutors(TestCase):
