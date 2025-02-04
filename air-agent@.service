@@ -1,6 +1,6 @@
 [Unit]
 Description=NVIDIA Air Agent Service
-After=syslog.target
+After=network.target
 
 [Service]
 Type=simple
@@ -8,8 +8,8 @@ User=root
 Group=root
 WorkingDirectory=/usr/local/lib/air-agent
 ExecStart={1} vrf exec {2} /usr/bin/python3 /usr/local/lib/air-agent/agent.py
-StandardOutput=syslog
-StandardError=syslog
+StandardOutput=journal
+StandardError=journal
 Restart=on-failure
 RestartSec=3
 
