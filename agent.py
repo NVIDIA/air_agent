@@ -664,11 +664,9 @@ def check_devices(config):
     if not mount_device(config):
         return False
     try:
-        subprocess.run(f'ls {key_dir / "uuid*"}', shell=True)
-    except:
-        logging.info(f'Failed to find expected files on {device} filesystem - agent will not be started')
-        logging.debug(traceback.format_exc())
-        return False
+        if not list(key_dir.glob('uuid*.txt')):
+            logging.info(f'Failed to find expected files on {device} filesystem - agent will not be started')
+            return False
 
     return True
 
