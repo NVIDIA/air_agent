@@ -93,8 +93,8 @@ class Agent:
         try:
             output = subprocess.check_output('hwclock --version', shell=True)
             match = re.match(r'.*(\d+\.\d+\.\d+)', output.decode('utf-8'))
-            version = match.groups()[0]
-            if version >= '2.32':
+            version = tuple(int(part) for part in match.groups()[0].split('.'))
+            if version >= (2, 32):
                 logging.debug('Detected hwclock switch: --verbose')
                 self.hwclock_switch = '--verbose'
                 return
