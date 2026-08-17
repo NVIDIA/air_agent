@@ -226,10 +226,9 @@ class TestAgent(TestCase):
         mock_log.assert_called_with('Failed to get post-clone instructions')
 
     @patch('agent.Agent.get_identity', return_value=False)
-    @patch('builtins.Exception')
-    def test_get_instructions_no_identity(self, mock_exception, mock_identity):
-        self.agent.get_instructions()
-        mock_exception.assert_called_with('No identity')
+    def test_get_instructions_no_identity(self, mock_identity):
+        with self.assertRaisesRegex(Exception, 'No identity'):
+            self.agent.get_instructions()
 
     @patch('requests.delete')
     @patch('logging.info')
